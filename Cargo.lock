@@ -4196,6 +4196,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "mithril-universal"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "hex",
+ "mithril-cardano-node-chain",
+ "mithril-common",
+ "mithril-stm",
+ "mockall",
+ "serde",
+ "thiserror 2.0.17",
+ "tokio",
+]
+
+[[package]]
 name = "mithrildemo"
 version = "0.1.53"
 dependencies = [

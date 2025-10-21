@@ -1,0 +1,34 @@
+[package]
+name = "mithril-universal"
+version = "0.1.0"
+description = "Universal chain abstraction layer for Mithril"
+authors = { workspace = true }
+edition = { workspace = true }
+documentation = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+[dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+hex = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+
+# Mithril dependencies
+mithril-common = { path = "../mithril-common" }
+mithril-stm = { path = "../mithril-stm" }
+
+# Optional: Cardano adapter
+mithril-cardano-node-chain = { path = "../internal/cardano-node/mithril-cardano-node-chain", optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "test-util"] }
+mockall = { workspace = true }
+
+[features]
+default = []
+cardano-adapter = ["mithril-cardano-node-chain"]
+
