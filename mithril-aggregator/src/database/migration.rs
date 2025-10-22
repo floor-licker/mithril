@@ -251,5 +251,15 @@ alter table signed_entity add column epoch as (coalesce(json_extract(beacon, '$.
 create index signed_entity_epoch on signed_entity(epoch);
         "#,
         ),
+        // Migration 37
+        // Add chain_type to certificate table for multi-chain support.
+        // Default to 'cardano' for backward compatibility with existing certificates.
+        SqlMigration::new(
+            37,
+            r#"
+alter table certificate add column chain_type text not null default 'cardano';
+create index certificate_chain_type_index on certificate(chain_type);
+        "#,
+        ),
     ]
 }

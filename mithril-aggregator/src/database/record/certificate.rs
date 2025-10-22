@@ -46,6 +46,10 @@ pub struct CertificateRecord {
     /// Cardano network of the certificate.
     pub network: String,
 
+    /// Chain type (e.g., "cardano", "ethereum")
+    /// Defaults to "cardano" for backward compatibility
+    pub chain_type: String,
+
     /// Signed entity type of the message
     pub signed_entity_type: SignedEntityType,
 
@@ -109,6 +113,7 @@ impl CertificateRecord {
             aggregate_verification_key: fake_keys::aggregate_verification_key()[0].to_owned(),
             epoch,
             network: fake_data::network().to_string(),
+            chain_type: "cardano".to_string(),
             signed_entity_type,
             protocol_version: "protocol_version".to_string(),
             protocol_parameters: ProtocolParameters {
@@ -148,6 +153,7 @@ impl TryFrom<Certificate> for CertificateRecord {
             aggregate_verification_key: other.aggregate_verification_key.to_json_hex()?,
             epoch: other.epoch,
             network: other.metadata.network,
+            chain_type: "cardano".to_string(), // Default to cardano for backward compatibility
             signed_entity_type,
             protocol_version: other.metadata.protocol_version,
             protocol_parameters: other.metadata.protocol_parameters,
@@ -269,14 +275,15 @@ impl SqLiteEntity for CertificateRecord {
         let aggregate_verification_key = row.read::<&str, _>(4).to_string();
         let epoch_int = row.read::<i64, _>(5);
         let network = row.read::<&str, _>(6).to_string();
-        let signed_entity_type_id = row.read::<i64, _>(7);
-        let signed_entity_beacon_string = Hydrator::read_signed_entity_beacon_column(&row, 8);
-        let protocol_version = row.read::<&str, _>(9).to_string();
-        let protocol_parameters_string = row.read::<&str, _>(10);
-        let protocol_message_string = row.read::<&str, _>(11);
-        let signers_string = row.read::<&str, _>(12);
-        let initiated_at = row.read::<&str, _>(13);
-        let sealed_at = row.read::<&str, _>(14);
+        let chain_type = row.read::<&str, _>(7).to_string();
+        let signed_entity_type_id = row.read::<i64, _>(8);
+        let signed_entity_beacon_string = Hydrator::read_signed_entity_beacon_column(&row, 9);
+        let protocol_version = row.read::<&str, _>(10).to_string();
+        let protocol_parameters_string = row.read::<&str, _>(11);
+        let protocol_message_string = row.read::<&str, _>(12);
+        let signers_string = row.read::<&str, _>(13);
+        let initiated_at = row.read::<&str, _>(14);
+        let sealed_at = row.read::<&str, _>(15);
 
         let certificate_record = Self {
             certificate_id,
@@ -290,6 +297,7 @@ impl SqLiteEntity for CertificateRecord {
                 ))
             })?),
             network,
+            chain_type,
             signed_entity_type: Hydrator::hydrate_signed_entity_type(
                 signed_entity_type_id.try_into().map_err(|e| {
                     HydrationError::InvalidData(format!(
@@ -356,6 +364,7 @@ impl SqLiteEntity for CertificateRecord {
         );
         projection.add_field("epoch", "{:certificate:}.epoch", "integer");
         projection.add_field("network", "{:certificate:}.network", "text");
+        projection.add_field("chain_type", "{:certificate:}.chain_type", "text");
         projection.add_field(
             "signed_entity_type_id",
             "{:certificate:}.signed_entity_type_id",
