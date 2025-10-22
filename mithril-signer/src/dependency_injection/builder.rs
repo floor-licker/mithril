@@ -7,7 +7,7 @@ use slog::Logger;
 use tokio::sync::{Mutex, RwLock};
 
 use mithril_cardano_node_chain::{
-    chain_observer::{CardanoCliRunner, ChainObserver, ChainObserverBuilder, ChainObserverType},
+    chain_observer::ChainObserver,
     chain_reader::PallasChainReader,
     chain_scanner::CardanoBlockScanner,
 };
@@ -46,6 +46,7 @@ use mithril_protocol_config::http_client::http_impl::HttpMithrilNetworkConfigura
 #[cfg(feature = "future_dmq")]
 use mithril_dmq::{DmqMessageBuilder, DmqPublisherClientPallas};
 
+use crate::chain_observer_factory;
 use crate::dependency_injection::SignerDependencyContainer;
 #[cfg(feature = "future_dmq")]
 use crate::services::SignaturePublisherDmq;
@@ -82,30 +83,7 @@ impl<'a> DependenciesBuilder<'a> {
     /// Create a new `DependenciesBuilder`.
     pub fn new(config: &'a Configuration, root_logger: Logger) -> Self {
         let chain_observer_builder: fn(&Configuration) -> StdResult<Arc<dyn ChainObserver>> =
-            |config: &Configuration| {
-                let chain_observer_type = ChainObserverType::Pallas;
-                let cardano_cli_path = &config.cardano_cli_path;
-                let cardano_node_socket_path = &config.cardano_node_socket_path;
-                let cardano_network = &config.get_network().with_context(|| {
-                    "Dependencies Builder can not get Cardano network while building the chain observer"
-                })?;
-                let cardano_cli_runner = &CardanoCliRunner::new(
-                    cardano_cli_path.to_owned(),
-                    cardano_node_socket_path.to_owned(),
-                    cardano_network.to_owned(),
-                );
-
-                let chain_observer_builder = ChainObserverBuilder::new(
-                    &chain_observer_type,
-                    cardano_node_socket_path,
-                    cardano_network,
-                    Some(cardano_cli_runner),
-                );
-
-                chain_observer_builder
-                    .build()
-                    .with_context(|| "Dependencies Builder can not build chain observer")
-            };
+            Self::default_chain_observer_builder;
 
         let immutable_file_observer_builder: fn(
             &Configuration,
@@ -137,6 +115,14 @@ impl<'a> DependenciesBuilder<'a> {
     /// Return a copy of the root logger.
     pub fn root_logger(&self) -> Logger {
         self.root_logger.clone()
+    }
+
+    /// Default chain observer builder using the factory
+    fn default_chain_observer_builder(config: &Configuration) -> StdResult<Arc<dyn ChainObserver>> {
+        // Create a basic logger for the chain observer factory
+        // In production, this will use the config's logging setup
+        let logger = slog::Logger::root(slog::Discard, slog::o!());
+        chain_observer_factory::build_chain_observer(config, logger)
     }
 
     /// Override default chain observer builder.

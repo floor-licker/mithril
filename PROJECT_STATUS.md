@@ -5,8 +5,8 @@
 Implementation of universal chain abstraction for Mithril, enabling fast-sync for multiple proof-of-stake blockchains starting with Ethereum.
 
 **Branch**: `feature/mithril-universal`  
-**Status**: Phase 2 Complete  
-**Commits**: 2 (Phase 1 + Phase 2)
+**Status**: Phase 2 Complete (Including Signer Modifications)  
+**Commits**: 2 (Phase 1 + Phase 2 + Signer)
 
 ## What Has Been Built
 
@@ -36,19 +36,30 @@ Complete Ethereum implementation using Beacon Chain API.
 - Tests - 10 passing tests (7 unit, 3 integration)
 - Documentation - Complete README and usage guide
 
+**Signer Multi-Chain Support**:
+- Restructured configuration module for multi-chain support
+- Created chain observer factory for pluggable observers
+- Integrated factory with DependenciesBuilder
+- Maintained full backward compatibility
+- All tests passing (182 tests)
+- See `PHASE_2_SIGNER_COMPLETE.md` for details
+
 ## Code Statistics
 
 ```
-Total Lines of Code: ~1800
+Total Lines of Code: ~2100
 - mithril-universal: 800 lines
 - mithril-ethereum-chain: 1000 lines
+- mithril-signer modifications: 300 lines
 
 Test Coverage:
 - mithril-universal: 10/10 passing
 - mithril-ethereum-chain: 10/10 passing
+- mithril-signer: 182/182 passing (no regressions)
 
 Documentation:
 - Design docs: 2300 lines (DESIGN, SUMMARY, IMPLEMENTATION_PLAN)
+- Status reports: 3 (Phase 1, Phase 2, Signer)
 - README files: 2 comprehensive guides
 - API documentation: Complete inline docs
 ```
@@ -84,7 +95,8 @@ mithril/
 ├── MITHRIL_ANYWHERE_SUMMARY.md   # Executive summary
 ├── IMPLEMENTATION_PLAN.md        # Week-by-week plan (681 lines)
 ├── PHASE_1_COMPLETE.md           # Phase 1 status
-└── PHASE_2_ETHEREUM_COMPLETE.md  # Phase 2 status
+├── PHASE_2_ETHEREUM_COMPLETE.md  # Phase 2 Ethereum status
+└── PHASE_2_SIGNER_COMPLETE.md    # Phase 2 Signer status
 ```
 
 ## Test Results

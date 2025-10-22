@@ -15,6 +15,8 @@ use mithril_era::{
     adapters::{EraReaderAdapterBuilder, EraReaderAdapterType},
 };
 
+use super::{CardanoConfig, ChainType, EthereumConfig};
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignaturePublisherConfig {
     /// Number of retry attempts when publishing the signature
@@ -37,7 +39,26 @@ pub struct SignaturePublisherConfig {
 /// Client configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Documenter)]
 pub struct Configuration {
-    /// Cardano CLI tool path
+    /// Type of blockchain (cardano or ethereum)
+    /// 
+    /// If not specified, defaults to cardano for backward compatibility
+    #[serde(default)]
+    pub chain_type: ChainType,
+
+    /// Cardano-specific configuration
+    /// 
+    /// Only used when chain_type is Cardano. For backward compatibility,
+    /// if this is None, the top-level Cardano fields are used instead.
+    #[serde(skip)]
+    pub cardano_config: Option<CardanoConfig>,
+
+    /// Ethereum-specific configuration
+    /// 
+    /// Only used when chain_type is Ethereum
+    #[serde(skip)]
+    pub ethereum_config: Option<EthereumConfig>,
+
+    /// Cardano CLI tool path (backward compatibility - prefer cardano_config)
     #[example = "`cardano-cli`"]
     pub cardano_cli_path: PathBuf,
 
@@ -156,6 +177,9 @@ impl Configuration {
         let signer_temp_dir =
             mithril_common::test::crypto_helper::setup_temp_directory_for_signer(&party_id, false);
         Self {
+            chain_type: ChainType::Cardano,
+            cardano_config: None,
+            ethereum_config: None,
             aggregator_endpoint: "http://0.0.0.0:8000".to_string(),
             relay_endpoint: None,
             cardano_cli_path: PathBuf::new(),
