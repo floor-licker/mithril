@@ -19,10 +19,14 @@ impl SingleSignatureRepository {
     }
 
     /// Create a new Single Signature in database
+    ///
+    /// The chain_type parameter is for logging and future extensibility.
+    /// Signatures are scoped by open_message_id, which itself is scoped by signed_entity_type.
     pub async fn create_single_signature(
         &self,
         single_signature: &SingleSignature,
         open_message: &OpenMessageRecord,
+        _chain_type: &str,  // Currently unused, kept for future extensibility and API consistency
     ) -> StdResult<SingleSignatureRecord> {
         let single_signature = SingleSignatureRecord::try_from_single_signature(
             single_signature,

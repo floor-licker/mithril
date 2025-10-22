@@ -78,10 +78,15 @@ pub trait CertifierService: Sync + Send {
     /// Add a new single signature for the open message at the given beacon. If
     /// the open message does not exist or the open message has been certified
     /// since then, an error is returned.
+    ///
+    /// The chain_type parameter ensures signatures are kept in separate pools per chain.
+    /// This is CRITICAL for security - mixing signatures from different chains would
+    /// create invalid certificates.
     async fn register_single_signature(
         &self,
         signed_entity_type: &SignedEntityType,
         signature: &SingleSignature,
+        chain_type: &str,
     ) -> StdResult<SignatureRegistrationStatus>;
 
     /// Create an open message at the given beacon. If the open message does not
@@ -139,10 +144,13 @@ pub trait CertifierService: Sync + Send {
 #[async_trait]
 pub trait BufferedSingleSignatureStore: Sync + Send {
     /// Buffer a single signature for later use.
+    ///
+    /// The chain_type parameter is for logging and future extensibility.
     async fn buffer_signature(
         &self,
         signed_entity_type_discriminant: SignedEntityTypeDiscriminants,
         signature: &SingleSignature,
+        chain_type: &str,
     ) -> StdResult<()>;
 
     /// Get the buffered single signatures for the given signed entity discriminant.

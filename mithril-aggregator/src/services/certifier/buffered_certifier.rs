@@ -43,6 +43,7 @@ impl BufferedCertifierService {
     async fn try_register_buffered_signatures_to_current_open_message(
         &self,
         signed_entity_type: &SignedEntityType,
+        chain_type: &str,
     ) -> StdResult<()> {
         let discriminant: SignedEntityTypeDiscriminants = signed_entity_type.into();
         let buffered_signatures = self
@@ -54,7 +55,7 @@ impl BufferedCertifierService {
         for signature in buffered_signatures {
             match self
                 .certifier_service
-                .register_single_signature(signed_entity_type, &signature)
+                .register_single_signature(signed_entity_type, &signature, chain_type)
                 .await
             {
                 Ok(..) => {
@@ -62,7 +63,7 @@ impl BufferedCertifierService {
                 }
                 Err(error) => match error.downcast_ref::<CertifierServiceError>() {
                     Some(CertifierServiceError::InvalidSingleSignature(..)) => {
-                        trace!(self.logger, "Skipping invalid signature for signed entity '{signed_entity_type:?}'";
+                        trace!(self.logger, "Skipping invalid signature for signed entity '{signed_entity_type:?}' (chain: {chain_type})";
                             "party_id" => &signature.party_id,
                             "error" => ?error,
                         );
@@ -92,10 +93,11 @@ impl CertifierService for BufferedCertifierService {
         &self,
         signed_entity_type: &SignedEntityType,
         signature: &SingleSignature,
+        chain_type: &str,
     ) -> StdResult<SignatureRegistrationStatus> {
         match self
             .certifier_service
-            .register_single_signature(signed_entity_type, signature)
+            .register_single_signature(signed_entity_type, signature, chain_type)
             .await
         {
             Ok(res) => Ok(res),
@@ -104,11 +106,12 @@ impl CertifierService for BufferedCertifierService {
                     debug!(
                         self.logger, "No OpenMessage available for signed entity - Buffering single signature";
                         "signed_entity_type" => ?signed_entity_type,
-                        "party_id" => &signature.party_id
+                        "party_id" => &signature.party_id,
+                        "chain_type" => chain_type
                     );
 
                     self.buffered_single_signature_store
-                        .buffer_signature(signed_entity_type.into(), signature)
+                        .buffer_signature(signed_entity_type.into(), signature, chain_type)
                         .await?;
 
                     Ok(SignatureRegistrationStatus::Buffered)
@@ -133,7 +136,7 @@ impl CertifierService for BufferedCertifierService {
 
         if creation_result.is_ok()
             && let Err(error) = self
-                .try_register_buffered_signatures_to_current_open_message(signed_entity_type)
+                .try_register_buffered_signatures_to_current_open_message(signed_entity_type, "cardano")
                 .await
         {
             warn!(self.logger, "Failed to register buffered signatures to the new open message";
@@ -239,6 +242,7 @@ mod tests {
             .register_single_signature(
                 &SignedEntityType::MithrilStakeDistribution(Epoch(5)),
                 signature_to_register,
+                "cardano",  // Test with cardano chain
             )
             .await;
 
@@ -256,7 +260,7 @@ mod tests {
                 |mock_certifier| {
                     mock_certifier
                         .expect_register_single_signature()
-                        .returning(|_, _| Ok(SignatureRegistrationStatus::Registered));
+                        .returning(|_, _, _| Ok(SignatureRegistrationStatus::Registered));
                 },
                 &SingleSignature::fake("party_1", "a message"),
             )
@@ -278,7 +282,7 @@ mod tests {
             let (registration_result, buffered_signatures_after_registration) =
                 run_register_signature_scenario(
                     |mock_certifier| {
-                        mock_certifier.expect_register_single_signature().returning(|_, _| {
+                        mock_certifier.expect_register_single_signature().returning(|_, _, _| {
                             Err(CertifierServiceError::NotFound(
                                 SignedEntityType::MithrilStakeDistribution(Epoch(5)),
                             )
@@ -305,7 +309,7 @@ mod tests {
             let (registration_result, buffered_signatures_after_registration) =
                 run_register_signature_scenario(
                     |mock_certifier| {
-                        mock_certifier.expect_register_single_signature().returning(|_, _| {
+                        mock_certifier.expect_register_single_signature().returning(|_, _, _| {
                             Err(CertifierServiceError::NotFound(
                                 SignedEntityType::MithrilStakeDistribution(Epoch(5)),
                             )
@@ -346,7 +350,7 @@ mod tests {
                 SingleSignature::fake("party_3", "message 3"),
             ),
         ] {
-            store.buffer_signature(signed_type, &signature).await.unwrap();
+            store.buffer_signature(signed_type, &signature, "cardano").await.unwrap();
         }
 
         let certifier = BufferedCertifierService::new(
@@ -359,16 +363,18 @@ mod tests {
                     .with(
                         eq(SignedEntityType::MithrilStakeDistribution(Epoch(5))),
                         eq(SingleSignature::fake("party_1", "message 1")),
+                        eq("cardano"),
                     )
                     .once()
-                    .returning(|_, _| Ok(SignatureRegistrationStatus::Registered));
+                    .returning(|_, _, _| Ok(SignatureRegistrationStatus::Registered));
                 mock.expect_register_single_signature()
                     .with(
                         eq(SignedEntityType::MithrilStakeDistribution(Epoch(5))),
                         eq(SingleSignature::fake("party_2", "message 2")),
+                        eq("cardano"),
                     )
                     .once()
-                    .returning(|_, _| Ok(SignatureRegistrationStatus::Registered));
+                    .returning(|_, _, _| Ok(SignatureRegistrationStatus::Registered));
             }),
             store.clone(),
             TestLogger::stdout(),
@@ -419,12 +425,12 @@ mod tests {
                         .returning(|_, _| Ok(OpenMessage::dummy()));
 
                     mock.expect_register_single_signature()
-                        .with(always(), eq(fake_data::single_signature(vec![1])))
-                        .returning(|_, _| Ok(SignatureRegistrationStatus::Registered))
+                        .with(always(), eq(fake_data::single_signature(vec![1])), eq("cardano"))
+                        .returning(|_, _, _| Ok(SignatureRegistrationStatus::Registered))
                         .once();
                     mock.expect_register_single_signature()
-                        .with(always(), eq(fake_data::single_signature(vec![2])))
-                        .returning(|_, _| {
+                        .with(always(), eq(fake_data::single_signature(vec![2])), eq("cardano"))
+                        .returning(|_, _, _| {
                             Err(CertifierServiceError::InvalidSingleSignature(
                                 OpenMessage::dummy().signed_entity_type,
                                 anyhow!("Invalid signature"),
@@ -433,8 +439,8 @@ mod tests {
                         })
                         .once();
                     mock.expect_register_single_signature()
-                        .with(always(), eq(fake_data::single_signature(vec![3])))
-                        .returning(|_, _| Ok(SignatureRegistrationStatus::Registered))
+                        .with(always(), eq(fake_data::single_signature(vec![3])), eq("cardano"))
+                        .returning(|_, _, _| Ok(SignatureRegistrationStatus::Registered))
                         .once();
                 },
                 |mock| {
@@ -461,7 +467,7 @@ mod tests {
                     mock.expect_create_open_message()
                         .returning(|_, _| Ok(OpenMessage::dummy()));
                     mock.expect_register_single_signature()
-                        .returning(|_, _| Ok(SignatureRegistrationStatus::Registered));
+                        .returning(|_, _, _| Ok(SignatureRegistrationStatus::Registered));
                 },
                 |mock| {
                     mock.expect_get_buffered_signatures()
@@ -478,7 +484,7 @@ mod tests {
                     mock.expect_create_open_message()
                         .returning(|_, _| Ok(OpenMessage::dummy()));
                     mock.expect_register_single_signature()
-                        .returning(|_, _| Err(anyhow!("register_single_signature error")));
+                        .returning(|_, _, _| Err(anyhow!("register_single_signature error")));
                 },
                 |mock| {
                     mock.expect_get_buffered_signatures()
@@ -495,7 +501,7 @@ mod tests {
                     mock.expect_create_open_message()
                         .returning(|_, _| Ok(OpenMessage::dummy()));
                     mock.expect_register_single_signature()
-                        .returning(|_, _| Ok(SignatureRegistrationStatus::Registered));
+                        .returning(|_, _, _| Ok(SignatureRegistrationStatus::Registered));
                 },
                 |mock| {
                     mock.expect_get_buffered_signatures()

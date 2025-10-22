@@ -105,25 +105,26 @@ impl CertifierService for MithrilCertifierService {
         &self,
         signed_entity_type: &SignedEntityType,
         signature: &SingleSignature,
+        chain_type: &str,
     ) -> StdResult<SignatureRegistrationStatus> {
         debug!(
             self.logger,
-            ">> register_single_signature(signed_entity_type: {signed_entity_type:?}, single_signatures: {signature:?}"
+            ">> register_single_signature(signed_entity_type: {signed_entity_type:?}, single_signatures: {signature:?}, chain_type: {chain_type})"
         );
-        trace!(self.logger, ">> register_single_signature"; "complete_single_signatures" => #?signature);
+        trace!(self.logger, ">> register_single_signature"; "complete_single_signatures" => #?signature, "chain_type" => chain_type);
 
         let open_message = self
             .get_open_message_record(signed_entity_type)
             .await.with_context(|| format!("CertifierService can not get open message record for signed_entity_type: '{signed_entity_type}'"))?
             .ok_or_else(|| {
-                warn!(self.logger, "register_single_signature: OpenMessage not found for type {signed_entity_type:?}.");
+                warn!(self.logger, "register_single_signature: OpenMessage not found for type {signed_entity_type:?} (chain: {chain_type}).");
                 CertifierServiceError::NotFound(signed_entity_type.clone())
             })?;
 
         if open_message.is_certified {
             warn!(
                 self.logger,
-                "register_single_signature: open message {signed_entity_type:?} is already certified, cannot register single signature."
+                "register_single_signature: open message {signed_entity_type:?} is already certified, cannot register single signature (chain: {chain_type})."
             );
 
             return Err(CertifierServiceError::AlreadyCertified(signed_entity_type.clone()).into());
@@ -132,7 +133,7 @@ impl CertifierService for MithrilCertifierService {
         if open_message.is_expired {
             warn!(
                 self.logger,
-                "register_single_signature: open message {signed_entity_type:?} has expired, cannot register single signature."
+                "register_single_signature: open message {signed_entity_type:?} has expired, cannot register single signature (chain: {chain_type})."
             );
 
             return Err(CertifierServiceError::Expired(signed_entity_type.clone()).into());
@@ -147,16 +148,16 @@ impl CertifierService for MithrilCertifierService {
 
         let single_signature = self
             .single_signature_repository
-            .create_single_signature(signature, &open_message.clone().into())
-            .await.with_context(|| format!("Certifier can not create the single signature from single_signature: '{signature:?}', open_message: '{open_message:?}'"))?;
+            .create_single_signature(signature, &open_message.clone().into(), chain_type)
+            .await.with_context(|| format!("Certifier can not create the single signature from single_signature: '{signature:?}', open_message: '{open_message:?}', chain_type: '{chain_type}'"))?;
         info!(
             self.logger,
-            "register_single_signature: created pool '{}' single signature for {signed_entity_type:?}.",
+            "register_single_signature: created pool '{}' single signature for {signed_entity_type:?} (chain: {chain_type}).",
             single_signature.signer_id
         );
         debug!(
             self.logger,
-            "register_single_signature: created single signature for open message ID='{}'.",
+            "register_single_signature: created single signature for open message ID='{}' (chain: {chain_type}).",
             single_signature.open_message_id
         );
 
@@ -640,7 +641,7 @@ mod tests {
             }
         }
         certifier_service
-            .register_single_signature(&signed_entity_type, &signatures[0])
+            .register_single_signature(&signed_entity_type, &signatures[0], "cardano")
             .await
             .unwrap();
         let open_message = certifier_service
@@ -683,7 +684,7 @@ mod tests {
             }
         }
         let err = certifier_service
-            .register_single_signature(&signed_entity_type, &signatures[0])
+            .register_single_signature(&signed_entity_type, &signatures[0], "cardano")
             .await
             .expect_err("register_single_signature should fail");
 
@@ -724,7 +725,7 @@ mod tests {
             }
         }
         certifier_service
-            .register_single_signature(&signed_entity_type, &signatures[0])
+            .register_single_signature(&signed_entity_type, &signatures[0], "cardano")
             .await
             .expect_err("register_single_signature should fail");
     }
@@ -757,7 +758,7 @@ mod tests {
             }
         }
         certifier_service
-            .register_single_signature(&signed_entity_type, &signatures[0])
+            .register_single_signature(&signed_entity_type, &signatures[0], "cardano")
             .await
             .expect_err("register_single_signature should fail");
     }
@@ -800,7 +801,7 @@ mod tests {
         }
         for signature in signatures {
             certifier_service
-                .register_single_signature(&signed_entity_type, &signature)
+                .register_single_signature(&signed_entity_type, &signature, "cardano")
                 .await
                 .expect("register_single_signature should not fail");
         }

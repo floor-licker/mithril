@@ -60,6 +60,7 @@ impl BufferedSingleSignatureStore for BufferedSingleSignatureRepository {
         &self,
         signed_entity_type_discriminant: SignedEntityTypeDiscriminants,
         signature: &SingleSignature,
+        _chain_type: &str,  // Currently unused, kept for future extensibility and API consistency
     ) -> StdResult<()> {
         let record = BufferedSingleSignatureRecord::try_from_single_signature(
             signature,
@@ -190,6 +191,7 @@ mod tests {
                         fake_keys::single_signature()[0].try_into().unwrap(),
                         vec![1],
                     ),
+                    "cardano",
                 )
                 .await
                 .unwrap();
@@ -201,6 +203,7 @@ mod tests {
                         fake_keys::single_signature()[1].try_into().unwrap(),
                         vec![2],
                     ),
+                    "cardano",
                 )
                 .await
                 .unwrap();
@@ -233,6 +236,7 @@ mod tests {
                         fake_keys::single_signature()[2].try_into().unwrap(),
                         vec![3],
                     ),
+                    "cardano",
                 )
                 .await
                 .unwrap();

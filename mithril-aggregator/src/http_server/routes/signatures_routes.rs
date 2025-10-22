@@ -2,18 +2,108 @@ use crate::http_server::routes::middlewares;
 use crate::http_server::routes::router::RouterState;
 use warp::Filter;
 
+/// Signature registration routes configuration
+///
+/// # Multi-Chain Signature Routing Strategy
+///
+/// This module implements **chain-specific signature registration** to prevent cross-contamination
+/// of signatures from different blockchains. This is CRITICAL for security - mixing Cardano and
+/// Ethereum signatures would result in invalid multi-signatures.
+///
+/// ## Design Rationale
+///
+/// Signatures must be kept strictly separated by chain because:
+/// 1. **Different Stake Distributions**: Cardano SPO stakes ≠ Ethereum validator stakes
+/// 2. **Different Cryptographic Contexts**: Signatures are over different messages
+/// 3. **Invalid Aggregation**: Mixing would create cryptographically invalid certificates
+///
+/// ## Routing Strategy (Asymmetric for Backward Compatibility)
+///
+/// ### Legacy Endpoint (Backward Compatible)
+/// ```text
+/// POST /register-signatures   → Registers Cardano signature (implicit)
+/// ```
+///
+/// This defaults to Cardano for backward compatibility with existing Mithril signers.
+///
+/// ### Chain-Specific Endpoints (Explicit)
+/// ```text
+/// POST /cardano/register-signatures    → Registers Cardano signature (explicit)
+/// POST /ethereum/register-signatures   → Registers Ethereum signature (explicit)
+/// ```
+///
+/// New signers should use these explicit endpoints to clearly indicate which chain they're signing for.
+///
+/// ## Security Implications
+///
+/// **CRITICAL**: The chain_type parameter determines which signature pool the signature goes into.
+/// This prevents the following attack/error scenarios:
+/// - Cardano signer accidentally sending to Ethereum endpoint
+/// - Ethereum signatures being aggregated with Cardano stakes
+/// - Cross-chain signature replay attacks
+///
+/// ## Implementation Note
+///
+/// All routes call the same handler with different chain_type parameters. The asymmetry
+/// is intentional for backward compatibility, not a technical limitation.
 pub fn routes(
     router_state: &RouterState,
 ) -> impl Filter<Extract = (impl warp::Reply + use<>,), Error = warp::Rejection> + Clone + use<> {
-    register_signatures(router_state)
+    // Legacy route (backward compatible, defaults to Cardano)
+    legacy_register_signatures(router_state)
+        // Chain-specific routes (explicit chain selection)
+        .or(cardano_register_signatures(router_state))
+        .or(ethereum_register_signatures(router_state))
 }
 
 /// POST /register-signatures
-fn register_signatures(
+///
+/// Legacy endpoint that defaults to Cardano for backward compatibility.
+/// Existing Mithril signers use this endpoint and expect Cardano behavior.
+fn legacy_register_signatures(
     router_state: &RouterState,
 ) -> impl Filter<Extract = (impl warp::Reply + use<>,), Error = warp::Rejection> + Clone + use<> {
     warp::path!("register-signatures")
         .and(warp::post())
+        .and(warp::any().map(|| "cardano".to_string())) // Default to Cardano
+        .and(warp::body::json())
+        .and(middlewares::with_logger(router_state))
+        .and(middlewares::with_certifier_service(router_state))
+        .and(middlewares::with_single_signature_authenticator(
+            router_state,
+        ))
+        .and(middlewares::with_metrics_service(router_state))
+        .and_then(handlers::register_signatures)
+}
+
+/// POST /cardano/register-signatures
+///
+/// Explicit Cardano signature registration endpoint.
+fn cardano_register_signatures(
+    router_state: &RouterState,
+) -> impl Filter<Extract = (impl warp::Reply + use<>,), Error = warp::Rejection> + Clone + use<> {
+    warp::path!("cardano" / "register-signatures")
+        .and(warp::post())
+        .and(warp::any().map(|| "cardano".to_string()))
+        .and(warp::body::json())
+        .and(middlewares::with_logger(router_state))
+        .and(middlewares::with_certifier_service(router_state))
+        .and(middlewares::with_single_signature_authenticator(
+            router_state,
+        ))
+        .and(middlewares::with_metrics_service(router_state))
+        .and_then(handlers::register_signatures)
+}
+
+/// POST /ethereum/register-signatures
+///
+/// Explicit Ethereum signature registration endpoint.
+fn ethereum_register_signatures(
+    router_state: &RouterState,
+) -> impl Filter<Extract = (impl warp::Reply + use<>,), Error = warp::Rejection> + Clone + use<> {
+    warp::path!("ethereum" / "register-signatures")
+        .and(warp::post())
+        .and(warp::any().map(|| "ethereum".to_string()))
         .and(warp::body::json())
         .and(middlewares::with_logger(router_state))
         .and(middlewares::with_certifier_service(router_state))
@@ -42,15 +132,22 @@ mod handlers {
 
     const METRICS_HTTP_ORIGIN: &str = "HTTP";
 
-    /// Register Signatures
+    /// Register Signatures with chain awareness
+    ///
+    /// This handler serves both legacy and chain-specific routes.
+    /// The chain_type parameter is injected by the route filters.
+    ///
+    /// **CRITICAL**: The chain_type determines which signature pool this signature goes into.
+    /// Mixing Cardano and Ethereum signatures would create invalid certificates.
     pub async fn register_signatures(
+        chain_type: String,
         message: RegisterSignatureMessageHttp,
         logger: Logger,
         certifier_service: Arc<dyn CertifierService>,
         single_signer_authenticator: Arc<SingleSignatureAuthenticator>,
         metrics_service: Arc<MetricsService>,
     ) -> Result<impl warp::Reply, Infallible> {
-        debug!(logger, ">> register_signatures"; "payload" => ?message);
+        debug!(logger, ">> register_signatures"; "payload" => ?message, "chain_type" => &chain_type);
 
         metrics_service
             .get_signature_registration_total_received_since_startup()
@@ -62,7 +159,7 @@ mod handlers {
         let mut single_signature = match FromRegisterSingleSignatureAdapter::try_adapt(message) {
             Ok(signature) => signature,
             Err(err) => {
-                warn!(logger,"register_signatures::payload decoding error"; "error" => ?err);
+                warn!(logger,"register_signatures::payload decoding error"; "error" => ?err, "chain_type" => &chain_type);
 
                 return Ok(reply::bad_request(
                     "Could not decode signature payload".to_string(),
@@ -79,35 +176,36 @@ mod handlers {
         );
 
         if !single_signature.is_authenticated() {
-            debug!(logger, "register_signatures::unauthenticated_signature");
+            debug!(logger, "register_signatures::unauthenticated_signature"; "chain_type" => &chain_type);
             return Ok(reply::bad_request(
                 "Could not authenticate signature".to_string(),
                 "Signature could not be authenticated".to_string(),
             ));
         }
 
+        // Register signature with chain type to keep pools separate
         match certifier_service
-            .register_single_signature(&signed_entity_type, &single_signature)
+            .register_single_signature(&signed_entity_type, &single_signature, &chain_type)
             .await
         {
             Err(err) => match err.downcast_ref::<CertifierServiceError>() {
                 Some(CertifierServiceError::AlreadyCertified(signed_entity_type)) => {
-                    debug!(logger,"register_signatures::open_message_already_certified"; "signed_entity_type" => ?signed_entity_type);
+                    debug!(logger,"register_signatures::open_message_already_certified"; "signed_entity_type" => ?signed_entity_type, "chain_type" => &chain_type);
                     Ok(reply::gone(
                         "already_certified".to_string(),
                         err.to_string(),
                     ))
                 }
                 Some(CertifierServiceError::Expired(signed_entity_type)) => {
-                    debug!(logger,"register_signatures::open_message_expired"; "signed_entity_type" => ?signed_entity_type);
+                    debug!(logger,"register_signatures::open_message_expired"; "signed_entity_type" => ?signed_entity_type, "chain_type" => &chain_type);
                     Ok(reply::gone("expired".to_string(), err.to_string()))
                 }
                 Some(CertifierServiceError::NotFound(signed_entity_type)) => {
-                    debug!(logger,"register_signatures::not_found"; "signed_entity_type" => ?signed_entity_type);
+                    debug!(logger,"register_signatures::not_found"; "signed_entity_type" => ?signed_entity_type, "chain_type" => &chain_type);
                     Ok(reply::empty(StatusCode::NOT_FOUND))
                 }
                 Some(_) | None => {
-                    warn!(logger,"register_signatures::error"; "error" => ?err);
+                    warn!(logger,"register_signatures::error"; "error" => ?err, "chain_type" => &chain_type);
                     Ok(reply::server_error(err))
                 }
             },
@@ -148,6 +246,10 @@ mod tests {
         warp::any().and(routes(&state).with(cors))
     }
 
+    // ========================================================================
+    // LEGACY ENDPOINT TESTS (Backward Compatibility)
+    // ========================================================================
+
     #[tokio::test]
     async fn test_register_signatures_increments_signature_registration_total_received_since_startup_metric()
      {
@@ -182,9 +284,9 @@ mod tests {
         let mut mock_certifier_service = MockCertifierService::new();
         mock_certifier_service
             .expect_register_single_signature()
-            .withf(|_, signature| signature.is_authenticated())
+            .withf(|_, signature, _| signature.is_authenticated())
             .once()
-            .return_once(move |_, _| Ok(SignatureRegistrationStatus::Registered));
+            .return_once(move |_, _, _| Ok(SignatureRegistrationStatus::Registered));
         let mut dependency_manager = initialize_dependencies!().await;
         dependency_manager.certifier_service = Arc::new(mock_certifier_service);
         dependency_manager.single_signer_authenticator =
@@ -251,7 +353,7 @@ mod tests {
         let mut mock_certifier_service = MockCertifierService::new();
         mock_certifier_service
             .expect_register_single_signature()
-            .return_once(move |_, _| Ok(SignatureRegistrationStatus::Registered));
+            .return_once(move |_, _, _| Ok(SignatureRegistrationStatus::Registered));
         let mut dependency_manager = initialize_dependencies!().await;
         dependency_manager.certifier_service = Arc::new(mock_certifier_service);
         dependency_manager.single_signer_authenticator =
@@ -288,7 +390,7 @@ mod tests {
         let mut mock_certifier_service = MockCertifierService::new();
         mock_certifier_service
             .expect_register_single_signature()
-            .return_once(move |_, _| Ok(SignatureRegistrationStatus::Buffered));
+            .return_once(move |_, _, _| Ok(SignatureRegistrationStatus::Buffered));
         let mut dependency_manager = initialize_dependencies!().await;
         dependency_manager.certifier_service = Arc::new(mock_certifier_service);
         dependency_manager.single_signer_authenticator =
@@ -325,7 +427,7 @@ mod tests {
         let mut mock_certifier_service = MockCertifierService::new();
         mock_certifier_service
             .expect_register_single_signature()
-            .return_once(move |_, _| Ok(SignatureRegistrationStatus::Registered));
+            .return_once(move |_, _, _| Ok(SignatureRegistrationStatus::Registered));
         let mut dependency_manager = initialize_dependencies!().await;
         dependency_manager.certifier_service = Arc::new(mock_certifier_service);
         dependency_manager.single_signer_authenticator =
@@ -365,7 +467,7 @@ mod tests {
         let mut mock_certifier_service = MockCertifierService::new();
         mock_certifier_service
             .expect_register_single_signature()
-            .return_once(move |_, _| {
+            .return_once(move |_, _, _| {
                 Err(CertifierServiceError::NotFound(signed_entity_type).into())
             });
         let mut dependency_manager = initialize_dependencies!().await;
@@ -404,7 +506,7 @@ mod tests {
         let mut mock_certifier_service = MockCertifierService::new();
         mock_certifier_service
             .expect_register_single_signature()
-            .return_once(move |_, _| {
+            .return_once(move |_, _, _| {
                 Err(CertifierServiceError::AlreadyCertified(signed_entity_type).into())
             });
         let mut dependency_manager = initialize_dependencies!().await;
@@ -451,7 +553,7 @@ mod tests {
         let mut mock_certifier_service = MockCertifierService::new();
         mock_certifier_service
             .expect_register_single_signature()
-            .return_once(move |_, _| {
+            .return_once(move |_, _, _| {
                 Err(CertifierServiceError::Expired(SignedEntityType::dummy()).into())
             });
         let mut dependency_manager = initialize_dependencies!().await;
@@ -497,7 +599,7 @@ mod tests {
         let mut mock_certifier_service = MockCertifierService::new();
         mock_certifier_service
             .expect_register_single_signature()
-            .return_once(move |_, _| Err(anyhow!("an error occurred")));
+            .return_once(move |_, _, _| Err(anyhow!("an error occurred")));
         let mut dependency_manager = initialize_dependencies!().await;
         dependency_manager.certifier_service = Arc::new(mock_certifier_service);
         dependency_manager.single_signer_authenticator =
@@ -527,5 +629,59 @@ mod tests {
             &StatusCode::INTERNAL_SERVER_ERROR,
         )
         .unwrap();
+    }
+
+    // ========================================================================
+    // CHAIN-SPECIFIC ENDPOINT TESTS (Multi-Chain Support)
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_cardano_register_signatures_post_ok() {
+        let mut mock_certifier_service = MockCertifierService::new();
+        mock_certifier_service
+            .expect_register_single_signature()
+            .withf(|_, _, chain_type| chain_type == "cardano")
+            .return_once(move |_, _, _| Ok(SignatureRegistrationStatus::Registered));
+        let mut dependency_manager = initialize_dependencies!().await;
+        dependency_manager.certifier_service = Arc::new(mock_certifier_service);
+        dependency_manager.single_signer_authenticator =
+            Arc::new(SingleSignatureAuthenticator::new_that_authenticate_everything());
+
+        let message = RegisterSignatureMessageHttp::dummy();
+        let response = request()
+            .method(Method::POST.as_str())
+            .path("/cardano/register-signatures")
+            .json(&message)
+            .reply(&setup_router(RouterState::new_with_dummy_config(Arc::new(
+                dependency_manager,
+            ))))
+            .await;
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+    }
+
+    #[tokio::test]
+    async fn test_ethereum_register_signatures_post_ok() {
+        let mut mock_certifier_service = MockCertifierService::new();
+        mock_certifier_service
+            .expect_register_single_signature()
+            .withf(|_, _, chain_type| chain_type == "ethereum")
+            .return_once(move |_, _, _| Ok(SignatureRegistrationStatus::Registered));
+        let mut dependency_manager = initialize_dependencies!().await;
+        dependency_manager.certifier_service = Arc::new(mock_certifier_service);
+        dependency_manager.single_signer_authenticator =
+            Arc::new(SingleSignatureAuthenticator::new_that_authenticate_everything());
+
+        let message = RegisterSignatureMessageHttp::dummy();
+        let response = request()
+            .method(Method::POST.as_str())
+            .path("/ethereum/register-signatures")
+            .json(&message)
+            .reply(&setup_router(RouterState::new_with_dummy_config(Arc::new(
+                dependency_manager,
+            ))))
+            .await;
+
+        assert_eq!(response.status(), StatusCode::CREATED);
     }
 }

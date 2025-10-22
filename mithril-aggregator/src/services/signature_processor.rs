@@ -68,7 +68,7 @@ impl SignatureProcessor for SequentialSignatureProcessor {
                     self.authenticate_signature(&mut signature);
                     match self
                         .certifier
-                        .register_single_signature(&signed_entity_type, &signature)
+                        .register_single_signature(&signed_entity_type, &signature, "cardano")  // Default to cardano for internal processing
                         .await
                     {
                         Err(e) => {
@@ -166,8 +166,9 @@ mod tests {
                         authentication_status: SingleSignatureAuthenticationStatus::Authenticated,
                         ..fake_data::single_signature(vec![1, 2, 3])
                     }),
+                    eq("cardano"),
                 )
-                .returning(|_, single_signature| {
+                .returning(|_, single_signature, _| {
                     assert_eq!(
                         single_signature.authentication_status,
                         SingleSignatureAuthenticationStatus::Authenticated
@@ -183,8 +184,9 @@ mod tests {
                         authentication_status: SingleSignatureAuthenticationStatus::Authenticated,
                         ..fake_data::single_signature(vec![4, 5, 6])
                     }),
+                    eq("cardano"),
                 )
-                .returning(|_, _| Ok(SignatureRegistrationStatus::Registered))
+                .returning(|_, _, _| Ok(SignatureRegistrationStatus::Registered))
                 .times(1);
             mock_certifier
         };
@@ -235,8 +237,9 @@ mod tests {
                         authentication_status: SingleSignatureAuthenticationStatus::Authenticated,
                         ..fake_data::single_signature(vec![1, 2, 3])
                     }),
+                    eq("cardano"),
                 )
-                .returning(|_, _| Ok(SignatureRegistrationStatus::Registered))
+                .returning(|_, _, _| Ok(SignatureRegistrationStatus::Registered))
                 .times(1);
 
             mock_certifier
