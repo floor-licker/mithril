@@ -1,0 +1,27 @@
+{
+  "_comment": "Example configuration for Ethereum Mainnet signer",
+  
+  "chain_type": "ethereum",
+  
+  "aggregator_endpoint": "https://aggregator.mithril.network/ethereum",
+  "relay_endpoint": null,
+  
+  "run_interval": 30000,
+  
+  "db_directory": "/data/mithril-signer/ethereum/mainnet/db",
+  "data_stores_directory": "/data/mithril-signer/ethereum/mainnet/stores",
+  
+  "beacon_endpoint": "http://localhost:5052",
+  "network": "mainnet",
+  "validator_pubkey": "0x...",
+  "validator_seckey_path": "/keys/validator.key",
+  "certification_interval_epochs": 675,
+  
+  "era_reader_adapter_type": "bootstrap",
+  "era_reader_adapter_params": null,
+  
+  "enable_metrics_server": true,
+  "metrics_server_ip": "0.0.0.0",
+  "metrics_server_port": 9090
+}
+

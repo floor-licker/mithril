@@ -1,0 +1,27 @@
+{
+  "_comment": "Example configuration for Ethereum Holesky testnet signer",
+  
+  "chain_type": "ethereum",
+  
+  "aggregator_endpoint": "https://aggregator.mithril.network/ethereum/holesky",
+  "relay_endpoint": null,
+  
+  "run_interval": 10000,
+  
+  "db_directory": "/data/mithril-signer/ethereum/holesky/db",
+  "data_stores_directory": "/data/mithril-signer/ethereum/holesky/stores",
+  
+  "beacon_endpoint": "http://localhost:5052",
+  "network": "holesky",
+  "validator_pubkey": "0x...",
+  "validator_seckey_path": "/keys/validator.key",
+  "certification_interval_epochs": 675,
+  
+  "era_reader_adapter_type": "bootstrap",
+  "era_reader_adapter_params": null,
+  
+  "enable_metrics_server": true,
+  "metrics_server_ip": "0.0.0.0",
+  "metrics_server_port": 9090
+}
+
