@@ -6,6 +6,7 @@
 //! See the [Mithril documentation](https://mithril.network/doc/manual/developer-docs/nodes/mithril-signer)
 //! for more information on how it works.
 
+mod chain_observer_adapter;
 mod chain_observer_factory;
 mod commands;
 mod configuration;

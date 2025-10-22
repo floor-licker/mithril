@@ -2,13 +2,15 @@
 
 use std::sync::Arc;
 
-use anyhow::Context;
+use anyhow::{Context, anyhow};
 use mithril_cardano_node_chain::chain_observer::{
     CardanoCliRunner, ChainObserver, ChainObserverBuilder, ChainObserverType,
 };
 use mithril_common::StdResult;
+use mithril_ethereum_chain::{BeaconClient, EthereumChainObserver};
 use slog::Logger;
 
+use crate::chain_observer_adapter::UniversalChainObserverAdapter;
 use crate::configuration::{ChainType, Configuration};
 
 /// Build a chain observer based on configuration
@@ -53,12 +55,28 @@ fn build_cardano_observer(
 
 /// Build an Ethereum chain observer
 fn build_ethereum_observer(
-    _config: &Configuration,
+    config: &Configuration,
     _logger: Logger,
 ) -> StdResult<Arc<dyn ChainObserver>> {
-    // For now, return an error. This will be implemented when we integrate
-    // mithril-ethereum-chain with the signer.
-    anyhow::bail!("Ethereum observer not yet implemented in signer")
+    // Extract Ethereum configuration
+    let eth_config = config
+        .ethereum_config
+        .as_ref()
+        .ok_or_else(|| anyhow!("Ethereum configuration required when chain_type is Ethereum"))?;
+
+    // Create beacon client
+    let beacon_client = BeaconClient::new(&eth_config.beacon_endpoint);
+
+    // Create Ethereum chain observer (UniversalChainObserver)
+    let observer = EthereumChainObserver::new(
+        beacon_client,
+        &eth_config.network,
+    );
+
+    // Wrap in adapter to make it compatible with Cardano's ChainObserver trait
+    let adapter = UniversalChainObserverAdapter::new(Arc::new(observer));
+
+    Ok(Arc::new(adapter))
 }
 
 #[cfg(test)]
@@ -88,17 +106,17 @@ mod tests {
     }
 
     #[test]
-    fn test_build_ethereum_observer_not_implemented() {
+    fn test_build_ethereum_observer_requires_config() {
         let mut config = Configuration::new_sample::<PartyId>("test".to_string());
         config.chain_type = ChainType::Ethereum;
         let logger = slog::Logger::root(slog::Discard, slog::o!());
 
         let result = build_chain_observer(&config, logger);
         match result {
-            Ok(_) => panic!("Expected error for Ethereum observer"),
+            Ok(_) => panic!("Expected error for Ethereum observer without config"),
             Err(e) => assert!(
-                e.to_string().contains("Ethereum observer not yet implemented"),
-                "Expected 'not yet implemented' error, got: {}",
+                e.to_string().contains("Ethereum configuration required"),
+                "Expected 'configuration required' error, got: {}",
                 e
             ),
         }
