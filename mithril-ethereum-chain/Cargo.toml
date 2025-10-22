@@ -1,0 +1,28 @@
+[package]
+name = "mithril-ethereum-chain"
+version = "0.1.0"
+description = "Ethereum chain integration for Mithril"
+authors = { workspace = true }
+edition = { workspace = true }
+documentation = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+[dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+hex = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+
+# Mithril dependencies
+mithril-universal = { path = "../mithril-universal" }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "test-util", "rt-multi-thread"] }
+mockito = "1.7"
+

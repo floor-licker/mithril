@@ -36,6 +36,7 @@ members = [
     "mithril-signer",
     "mithril-stm",
     "mithril-universal",
+    "mithril-ethereum-chain",
     "mithril-test-lab/mithril-aggregator-fake",
     "mithril-test-lab/mithril-end-to-end",
 ]
