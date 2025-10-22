@@ -35,6 +35,39 @@ impl GetCertificateRecordQuery {
         }
     }
 
+    /// Get certificate by ID and chain type (multi-chain aware)
+    pub fn by_certificate_id_and_chain(certificate_id: &str, chain_type: &str) -> Self {
+        Self {
+            condition: WhereCondition::new(
+                "certificate_id = ?*",
+                vec![Value::String(certificate_id.to_owned())],
+            )
+            .and_where(WhereCondition::new(
+                "chain_type = ?*",
+                vec![Value::String(chain_type.to_owned())],
+            )),
+        }
+    }
+
+    /// Get all certificates for a specific chain type (multi-chain aware)
+    pub fn by_chain_type(chain_type: &str) -> Self {
+        Self {
+            condition: WhereCondition::new(
+                "chain_type = ?*",
+                vec![Value::String(chain_type.to_owned())],
+            ),
+        }
+    }
+
+    /// Get all genesis certificates for a specific chain type (multi-chain aware)
+    pub fn all_genesis_by_chain(chain_type: &str) -> Self {
+        Self {
+            condition: WhereCondition::new("parent_certificate_id is null", vec![]).and_where(
+                WhereCondition::new("chain_type = ?*", vec![Value::String(chain_type.to_owned())]),
+            ),
+        }
+    }
+
     #[cfg(test)]
     pub fn by_epoch(epoch: Epoch) -> StdResult<Self> {
         Ok(Self {

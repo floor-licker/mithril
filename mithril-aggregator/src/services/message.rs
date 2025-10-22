@@ -49,6 +49,29 @@ pub trait MessageService: Sync + Send {
     async fn get_certificate_list_message(&self, limit: usize)
     -> StdResult<CertificateListMessage>;
 
+    /// Return the message representation of a certificate by chain type if it exists.
+    /// This is the multi-chain aware version of `get_certificate_message`.
+    async fn get_certificate_message_by_chain(
+        &self,
+        certificate_hash: &str,
+        chain_type: &str,
+    ) -> StdResult<Option<CertificateMessage>>;
+
+    /// Return the message representation of the latest genesis certificate by chain type.
+    /// This is the multi-chain aware version of `get_latest_genesis_certificate_message`.
+    async fn get_latest_genesis_certificate_message_by_chain(
+        &self,
+        chain_type: &str,
+    ) -> StdResult<Option<CertificateMessage>>;
+
+    /// Return the message representation of the last N certificates by chain type.
+    /// This is the multi-chain aware version of `get_certificate_list_message`.
+    async fn get_certificate_list_message_by_chain(
+        &self,
+        chain_type: &str,
+        limit: usize,
+    ) -> StdResult<CertificateListMessage>;
+
     /// Return the information regarding the given snapshot.
     async fn get_snapshot_message(
         &self,
@@ -202,6 +225,35 @@ impl MessageService for MithrilMessageService {
         limit: usize,
     ) -> StdResult<CertificateListMessage> {
         self.certificate_repository.get_latest_certificates(limit).await
+    }
+
+    async fn get_certificate_message_by_chain(
+        &self,
+        certificate_hash: &str,
+        chain_type: &str,
+    ) -> StdResult<Option<CertificateMessage>> {
+        self.certificate_repository
+            .get_certificate_by_chain(certificate_hash, chain_type)
+            .await
+    }
+
+    async fn get_latest_genesis_certificate_message_by_chain(
+        &self,
+        chain_type: &str,
+    ) -> StdResult<Option<CertificateMessage>> {
+        self.certificate_repository
+            .get_latest_genesis_certificate_by_chain(chain_type)
+            .await
+    }
+
+    async fn get_certificate_list_message_by_chain(
+        &self,
+        chain_type: &str,
+        limit: usize,
+    ) -> StdResult<CertificateListMessage> {
+        self.certificate_repository
+            .get_latest_certificates_by_chain(chain_type, limit)
+            .await
     }
 
     async fn get_snapshot_message(

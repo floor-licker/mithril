@@ -67,6 +67,62 @@ impl CertificateRepository {
         record.map(|c| c.try_into().map_err(Into::into)).transpose()
     }
 
+    /// Return the certificate corresponding to the given hash and chain type if any.
+    /// This is the multi-chain aware version of `get_certificate`.
+    pub async fn get_certificate_by_chain<T>(
+        &self,
+        hash: &str,
+        chain_type: &str,
+    ) -> StdResult<Option<T>>
+    where
+        T: TryFrom<CertificateRecord>,
+        T::Error: Into<StdError>,
+    {
+        let record = self.connection.fetch_first(
+            GetCertificateRecordQuery::by_certificate_id_and_chain(hash, chain_type),
+        )?;
+
+        record.map(|c| c.try_into().map_err(Into::into)).transpose()
+    }
+
+    /// Return the latest certificates for a specific chain type.
+    /// This is the multi-chain aware version of `get_latest_certificates`.
+    pub async fn get_latest_certificates_by_chain<T>(
+        &self,
+        chain_type: &str,
+        last_n: usize,
+    ) -> StdResult<Vec<T>>
+    where
+        T: TryFrom<CertificateRecord>,
+        T::Error: Into<StdError>,
+    {
+        let cursor = self
+            .connection
+            .fetch(GetCertificateRecordQuery::by_chain_type(chain_type))?;
+
+        cursor
+            .take(last_n)
+            .map(|c| c.try_into().map_err(Into::into))
+            .collect()
+    }
+
+    /// Return the latest genesis certificate for a specific chain type.
+    /// This is the multi-chain aware version of `get_latest_genesis_certificate`.
+    pub async fn get_latest_genesis_certificate_by_chain<T>(
+        &self,
+        chain_type: &str,
+    ) -> StdResult<Option<T>>
+    where
+        T: TryFrom<CertificateRecord>,
+        T::Error: Into<StdError>,
+    {
+        let record = self.connection.fetch_first(
+            GetCertificateRecordQuery::all_genesis_by_chain(chain_type),
+        )?;
+
+        record.map(|c| c.try_into().map_err(Into::into)).transpose()
+    }
+
     /// Return the first certificate signed per epoch as the reference
     /// certificate for this Epoch. This will be the parent certificate for all
     /// other certificates issued within this Epoch.
