@@ -192,7 +192,7 @@ async fn main() -> StdResult<()> {
     };
 
     // Load config
-    let config = config::Config::builder()
+    let raw_config = config::Config::builder()
         .set_default("disable_digests_cache", args.disable_digests_cache)
         .with_context(|| "configuration error: could not set `disable_digests_cache`")?
         .set_default("reset_digests_cache", args.reset_digests_cache)
@@ -235,9 +235,17 @@ async fn main() -> StdResult<()> {
         )
         .add_source(config::Environment::default())
         .build()
-        .with_context(|| "configuration build error")?
+        .with_context(|| "configuration build error")?;
+
+    let mut config: Configuration = raw_config
+        .clone()
         .try_deserialize()
         .with_context(|| "configuration deserialize error")?;
+
+    // Populate chain-specific configuration (e.g., Ethereum fields)
+    config
+        .populate_chain_config(&raw_config)
+        .with_context(|| "configuration chain config population error")?;
 
     let services = DependenciesBuilder::new(&config, root_logger.clone())
         .build()

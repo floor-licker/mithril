@@ -9,8 +9,8 @@ use crate::artifact_builder::{
     AncillaryArtifactBuilder, AncillaryFileUploader, CardanoDatabaseArtifactBuilder,
     CardanoImmutableFilesFullArtifactBuilder, CardanoStakeDistributionArtifactBuilder,
     CardanoTransactionsArtifactBuilder, DigestArtifactBuilder, DigestFileUploader,
-    DigestSnapshotter, ImmutableArtifactBuilder, ImmutableFilesUploader,
-    MithrilStakeDistributionArtifactBuilder,
+    DigestSnapshotter, EthereumStateRootArtifactBuilder, ImmutableArtifactBuilder,
+    ImmutableFilesUploader, MithrilStakeDistributionArtifactBuilder,
 };
 use crate::configuration::AncillaryFilesSignerConfig;
 use crate::dependency_injection::builder::SNAPSHOT_ARTIFACTS_DIR;
@@ -26,6 +26,7 @@ use crate::services::ancillary_signer::{
 use crate::services::{
     CompressedArchiveSnapshotter, DumbSnapshotter, MithrilSignedEntityService, SignedEntityService,
     SignedEntityServiceArtifactsDependencies, Snapshotter,
+    UniversalEthereumStateRootRetriever,
 };
 use crate::tools::DEFAULT_GCP_CREDENTIALS_JSON_ENV_VAR;
 use crate::tools::file_archiver::FileArchiver;
@@ -62,13 +63,24 @@ impl DependenciesBuilder {
             self.build_cardano_database_artifact_builder(cardano_node_version)
                 .await?,
         );
-        let dependencies = SignedEntityServiceArtifactsDependencies::new(
+        let mut dependencies = SignedEntityServiceArtifactsDependencies::new(
             mithril_stake_distribution_artifact_builder,
             cardano_immutable_files_full_artifact_builder,
             cardano_transactions_artifact_builder,
             cardano_stake_distribution_artifact_builder,
             cardano_database_artifact_builder,
         );
+
+        // Conditionally add Ethereum artifact builder if enabled
+        if let Some(ethereum_observer) = self.build_ethereum_chain_observer().await? {
+            let ethereum_state_root_retriever =
+                Arc::new(UniversalEthereumStateRootRetriever::new(ethereum_observer));
+            let ethereum_artifact_builder =
+                Arc::new(EthereumStateRootArtifactBuilder::new(ethereum_state_root_retriever));
+            dependencies =
+                dependencies.with_ethereum_state_root_artifact_builder(ethereum_artifact_builder);
+        }
+
         let signed_entity_service = Arc::new(MithrilSignedEntityService::new(
             signed_entity_storer,
             dependencies,

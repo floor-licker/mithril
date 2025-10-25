@@ -6,10 +6,10 @@
 //! See the [Mithril documentation](https://mithril.network/doc/manual/developer-docs/nodes/mithril-signer)
 //! for more information on how it works.
 
-mod chain_observer_adapter;
+pub mod chain_observer_adapter;
 mod chain_observer_factory;
 mod commands;
-mod configuration;
+pub mod configuration;
 pub mod database;
 pub mod dependency_injection;
 pub mod entities;

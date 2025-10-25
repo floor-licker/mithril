@@ -7,6 +7,7 @@ pub mod cardano_db;
 pub mod cardano_stake_distribution;
 pub mod cardano_transaction;
 mod deprecation;
+pub mod ethereum_state;
 pub mod mithril_stake_distribution;
 pub mod tools;
 

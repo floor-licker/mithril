@@ -18,6 +18,7 @@ use mithril_client_cli::commands::{
     DeprecatedCommand, Deprecation, cardano_db::CardanoDbCommands,
     cardano_stake_distribution::CardanoStakeDistributionCommands,
     cardano_transaction::CardanoTransactionCommands,
+    ethereum_state::EthereumStateCommands,
     mithril_stake_distribution::MithrilStakeDistributionCommands, tools::ToolsCommands,
 };
 use mithril_client_cli::{ClapError, CommandContext, ConfigParameters};
@@ -233,6 +234,9 @@ enum ArtifactCommands {
     #[clap(subcommand, alias("csd"))]
     CardanoStakeDistribution(CardanoStakeDistributionCommands),
 
+    #[clap(subcommand, alias("eth"))]
+    EthereumState(EthereumStateCommands),
+
     #[clap(alias("doc"), hide(true))]
     GenerateDoc(GenerateDocCommands),
 
@@ -247,6 +251,7 @@ impl ArtifactCommands {
             Self::MithrilStakeDistribution(cmd) => cmd.execute(context).await,
             Self::CardanoTransaction(cmd) => cmd.execute(context).await,
             Self::CardanoStakeDistribution(cmd) => cmd.execute(context).await,
+            Self::EthereumState(cmd) => cmd.execute(context).await,
             Self::GenerateDoc(cmd) => {
                 cmd.execute(&mut Args::command()).map_err(|message| anyhow!(message))
             }

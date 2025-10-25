@@ -2,9 +2,23 @@
 
 Universal chain abstraction layer for Mithril, enabling support for multiple proof-of-stake blockchains.
 
+> **Status:** Proof-of-Concept  
+> **Purpose:** Demonstrate Mithril's extensibility to blockchains beyond Cardano
+
 ## Overview
 
-`mithril-universal` provides the core abstractions needed to integrate any proof-of-stake blockchain with Mithril's stake-based threshold signature scheme. Instead of being limited to Cardano, Mithril can now support Ethereum, Solana, Polkadot, and any other PoS chain.
+`mithril-universal` provides the core abstractions needed to integrate any proof-of-stake blockchain with Mithril's stake-based threshold signature scheme. This crate establishes the architectural foundation for multi-chain support, validated through an Ethereum reference implementation.
+
+**What this enables:**
+- Blockchain-agnostic protocol components
+- Consistent API across different chains
+- Foundation for cross-chain proofs and light clients
+- Reference architecture for future blockchain integrations
+
+**What this is NOT:**
+- NOT a production-ready multi-chain deployment system
+- NOT a complete solution for fast sync across all chains
+- NOT intended to replace chain-specific optimizations
 
 ## Features
 
@@ -145,11 +159,11 @@ Enum of different commitment types:
 ## Roadmap
 
 ### Phase 1: Foundation (Current)
-- ✅ Core trait definitions
-- ✅ Type system
-- ✅ Error handling
-- ✅ Cardano adapter
-- ✅ Documentation and tests
+- [DONE] Core trait definitions
+- [DONE] Type system
+- [DONE] Error handling
+- [DONE] Cardano adapter
+- [DONE] Documentation and tests
 
 ### Phase 2: Ethereum Integration (Next)
 - [ ] Ethereum beacon chain client

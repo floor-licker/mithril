@@ -130,6 +130,7 @@ pub mod cardano_transaction_client;
 pub mod certificate_client;
 mod client;
 pub mod era;
+pub mod ethereum_state_client;
 pub mod feedback;
 mod message;
 pub mod mithril_stake_distribution_client;

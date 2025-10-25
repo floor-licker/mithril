@@ -150,6 +150,11 @@ impl AggregatorObserver {
                     .await?
                     .first()
                     .map(|s| &s.signed_entity_type)),
+            SignedEntityType::EthereumStateRoot(_) => {
+                // For Ethereum, we don't have a specific get_last method yet
+                // Return false for now (can be enhanced later)
+                Ok(false)
+            }
         }
     }
 }

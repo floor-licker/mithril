@@ -64,6 +64,13 @@ impl EthereumChainObserver {
         self
     }
 
+    /// Get the certification interval
+    ///
+    /// Returns the number of Ethereum epochs between certifications.
+    pub fn certification_interval(&self) -> u64 {
+        self.certification_interval_epochs
+    }
+
     /// Calculate the epoch to certify based on current epoch
     ///
     /// This ensures we only certify at interval boundaries and account for
@@ -154,12 +161,25 @@ impl UniversalChainObserver for EthereumChainObserver {
         &self,
         epoch: u64,
     ) -> Result<StateCommitment, ChainObserverError> {
-        // For Ethereum, we certify the execution layer state root at the last slot of the epoch
-        let last_slot_of_epoch = (epoch + 1) * 32 - 1;
-
+        // For Ethereum, we certify the execution layer state root (the hash of the entire
+        // Ethereum state at a specific block).
+        //
+        // Why we use "finalized" instead of a specific slot number:
+        //
+        // Ethereum has "missed slots" where no block was produced (validators were offline).
+        // If we tried to query `get_block_by_slot(12345)` and slot 12345 was missed, the
+        // beacon API would return 404 Not Found. This is spuer annoying to handle.
+        //
+        // By using the special string "finalized", we're asking for "whatever the most recent
+        // finalized block is right now". This is ALWAYS available (the chain can't finalize
+        // nothing), and finalized blocks are safe to certify because they won't be reverted.
+        //
+        // The epoch parameter is currently not used for slot calculation, but we accept it
+        // because the trait requires it. In the future, you could calculate the last finalized
+        // slot of that specific epoch if you need more precise targeting.
         let beacon_block = self
             .beacon_client
-            .get_block_by_slot(last_slot_of_epoch)
+            .get_block_by_slot_str("finalized")
             .await
             .map_err(|e| ChainObserverError::StateCommitmentError(e.to_string()))?;
 
@@ -184,7 +204,7 @@ impl UniversalChainObserver for EthereumChainObserver {
 
         // Build commitment with metadata
         let mut metadata = HashMap::new();
-        metadata.insert("slot".to_string(), last_slot_of_epoch.to_string());
+        metadata.insert("slot".to_string(), beacon_block.message.slot.clone());
         metadata.insert("block_hash".to_string(), execution_payload.block_hash);
         metadata.insert("beacon_root".to_string(), beacon_block.message.state_root);
         metadata.insert("parent_hash".to_string(), execution_payload.parent_hash);

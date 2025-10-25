@@ -6,13 +6,17 @@ use mithril_cardano_node_internal_database::signable_builder::{
 use mithril_common::crypto_helper::MKTreeStoreInMemory;
 use mithril_common::signable_builder::{
     CardanoStakeDistributionSignableBuilder, CardanoTransactionsSignableBuilder,
-    MithrilSignableBuilderService, MithrilStakeDistributionSignableBuilder, SignableBuilderService,
+    EthereumStateRootSignableBuilder, MithrilSignableBuilderService,
+    MithrilStakeDistributionSignableBuilder, SignableBuilderService,
     SignableBuilderServiceDependencies, SignableSeedBuilder, TransactionsImporter,
 };
 
 use crate::dependency_injection::{DependenciesBuilder, Result};
 use crate::get_dependency;
-use crate::services::{AggregatorSignableSeedBuilder, CardanoTransactionsImporter};
+use crate::services::{
+    AggregatorSignableSeedBuilder, CardanoTransactionsImporter,
+    UniversalEthereumStateRootRetriever,
+};
 impl DependenciesBuilder {
     async fn build_signable_builder_service(&mut self) -> Result<Arc<dyn SignableBuilderService>> {
         let seed_signable_builder = self.get_signable_seed_builder().await?;
@@ -39,13 +43,24 @@ impl DependenciesBuilder {
             &self.configuration.db_directory(),
             self.root_logger(),
         ));
-        let signable_builders_dependencies = SignableBuilderServiceDependencies::new(
+        let mut signable_builders_dependencies = SignableBuilderServiceDependencies::new(
             mithril_stake_distribution_builder,
             immutable_signable_builder,
             cardano_transactions_builder,
             cardano_stake_distribution_builder,
             cardano_database_signable_builder,
         );
+
+        // Conditionally add Ethereum signable builder if enabled
+        if let Some(ethereum_observer) = self.build_ethereum_chain_observer().await? {
+            let ethereum_state_root_retriever =
+                Arc::new(UniversalEthereumStateRootRetriever::new(ethereum_observer));
+            let ethereum_signable_builder =
+                Arc::new(EthereumStateRootSignableBuilder::new(ethereum_state_root_retriever));
+            signable_builders_dependencies =
+                signable_builders_dependencies.with_ethereum_state_root_builder(ethereum_signable_builder);
+        }
+
         let signable_builder_service = Arc::new(MithrilSignableBuilderService::new(
             seed_signable_builder,
             signable_builders_dependencies,

@@ -684,4 +684,89 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::CREATED);
     }
+
+    // ========================================================================
+    // CROSS-CHAIN SIGNATURE PREVENTION TESTS
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_legacy_route_passes_cardano_chain_type() {
+        let mut mock_certifier_service = MockCertifierService::new();
+        mock_certifier_service
+            .expect_register_single_signature()
+            .withf(|_, _, chain_type| {
+                // Verify legacy route defaults to cardano
+                chain_type == "cardano"
+            })
+            .return_once(move |_, _, _| Ok(SignatureRegistrationStatus::Registered));
+        let mut dependency_manager = initialize_dependencies!().await;
+        dependency_manager.certifier_service = Arc::new(mock_certifier_service);
+        dependency_manager.single_signer_authenticator =
+            Arc::new(SingleSignatureAuthenticator::new_that_authenticate_everything());
+
+        let message = RegisterSignatureMessageHttp::dummy();
+        let response = request()
+            .method(Method::POST.as_str())
+            .path("/register-signatures")
+            .json(&message)
+            .reply(&setup_router(RouterState::new_with_dummy_config(Arc::new(
+                dependency_manager,
+            ))))
+            .await;
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+    }
+
+    #[tokio::test]
+    async fn test_chain_specific_routes_pass_correct_chain_type() {
+        // Test Cardano route
+        {
+            let mut mock_certifier_service = MockCertifierService::new();
+            mock_certifier_service
+                .expect_register_single_signature()
+                .withf(|_, _, chain_type| chain_type == "cardano")
+                .return_once(move |_, _, _| Ok(SignatureRegistrationStatus::Registered));
+            let mut dependency_manager = initialize_dependencies!().await;
+            dependency_manager.certifier_service = Arc::new(mock_certifier_service);
+            dependency_manager.single_signer_authenticator =
+                Arc::new(SingleSignatureAuthenticator::new_that_authenticate_everything());
+
+            let message = RegisterSignatureMessageHttp::dummy();
+            let response = request()
+                .method(Method::POST.as_str())
+                .path("/cardano/register-signatures")
+                .json(&message)
+                .reply(&setup_router(RouterState::new_with_dummy_config(Arc::new(
+                    dependency_manager,
+                ))))
+                .await;
+
+            assert_eq!(response.status(), StatusCode::CREATED);
+        }
+
+        // Test Ethereum route
+        {
+            let mut mock_certifier_service = MockCertifierService::new();
+            mock_certifier_service
+                .expect_register_single_signature()
+                .withf(|_, _, chain_type| chain_type == "ethereum")
+                .return_once(move |_, _, _| Ok(SignatureRegistrationStatus::Registered));
+            let mut dependency_manager = initialize_dependencies!().await;
+            dependency_manager.certifier_service = Arc::new(mock_certifier_service);
+            dependency_manager.single_signer_authenticator =
+                Arc::new(SingleSignatureAuthenticator::new_that_authenticate_everything());
+
+            let message = RegisterSignatureMessageHttp::dummy();
+            let response = request()
+                .method(Method::POST.as_str())
+                .path("/ethereum/register-signatures")
+                .json(&message)
+                .reply(&setup_router(RouterState::new_with_dummy_config(Arc::new(
+                    dependency_manager,
+                ))))
+                .await;
+
+            assert_eq!(response.status(), StatusCode::CREATED);
+        }
+    }
 }

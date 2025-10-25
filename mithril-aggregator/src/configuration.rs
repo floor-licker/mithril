@@ -347,6 +347,42 @@ pub trait ConfigurationSource {
         Ok(allowed_discriminants)
     }
 
+    /// Check if a Cardano chain observer is required based on the configured signed entity types.
+    ///
+    /// Before multi-chain support, the aggregator always created a Cardano
+    /// chain observer (which needs a Cardano node connection). Now we need to support deploying
+    /// an Ethereum-only aggregator without requiring a Cardano node at all. This method looks at
+    /// what the aggregator is configured to certify and decides "do we actually need Cardano stuff?"
+    ///
+    /// Returns `true` if ANY Cardano-specific signed entity type is configured:
+    /// - CardanoImmutableFilesFull
+    /// - CardanoStakeDistribution
+    /// - CardanoDatabase
+    /// - CardanoTransactions
+    ///
+    /// Returns `false` if only Ethereum or universal types (MithrilStakeDistribution, EthereumStateRoot) are configured.
+    ///
+    /// This enables:
+    /// - Cardano-only aggregators (existing behavior, backward compatible)
+    /// - Ethereum-only aggregators (no Cardano node required)
+    /// - Multi-chain aggregators (both Cardano and Ethereum)
+    fn requires_cardano_observer(&self) -> StdResult<bool> {
+        let discriminants = self.compute_allowed_signed_entity_types_discriminants()?;
+
+        // These are the types that require actual Cardano chain data.
+        // If someone configures any of these, we need a real Cardano node connection.
+        let cardano_types = [
+            SignedEntityTypeDiscriminants::CardanoImmutableFilesFull,
+            SignedEntityTypeDiscriminants::CardanoStakeDistribution,
+            SignedEntityTypeDiscriminants::CardanoDatabase,
+            SignedEntityTypeDiscriminants::CardanoTransactions,
+        ];
+
+        Ok(discriminants
+            .iter()
+            .any(|d| cardano_types.contains(d)))
+    }
+
     /// Check if the HTTP server can serve static directories.
     fn allow_http_serve_directory(&self) -> bool {
         match self.snapshot_uploader_type() {
@@ -386,6 +422,26 @@ pub trait ConfigurationSource {
     /// Aggregate signature type
     fn aggregate_signature_type(&self) -> AggregateSignatureType {
         panic!("get_aggregate_signature_type is not implemented.");
+    }
+
+    /// Enable Ethereum chain observer
+    fn enable_ethereum_observer(&self) -> bool {
+        panic!("enable_ethereum_observer is not implemented.");
+    }
+
+    /// Ethereum Beacon Node endpoint
+    fn ethereum_beacon_endpoint(&self) -> Option<String> {
+        panic!("ethereum_beacon_endpoint is not implemented.");
+    }
+
+    /// Ethereum network identifier
+    fn ethereum_network(&self) -> Option<String> {
+        panic!("ethereum_network is not implemented.");
+    }
+
+    /// Ethereum certification interval in epochs
+    fn ethereum_certification_interval_epochs(&self) -> Option<u64> {
+        panic!("ethereum_certification_interval_epochs is not implemented.");
     }
 }
 
@@ -565,6 +621,34 @@ pub struct ServeCommandConfiguration {
 
     /// Aggregate signature type used to create certificates
     pub aggregate_signature_type: AggregateSignatureType,
+
+    /// Enable Ethereum chain observer for multi-chain support
+    ///
+    /// When enabled, the aggregator will also certify Ethereum execution layer state roots.
+    /// Requires ethereum_beacon_endpoint to be set.
+    pub enable_ethereum_observer: bool,
+
+    /// Ethereum Beacon Node HTTP endpoint
+    ///
+    /// This endpoint is used to query the Ethereum consensus layer (Beacon Chain)
+    /// to retrieve state roots, validator information, and epoch data.
+    #[example = "`http://localhost:5052` or `https://ethereum-holesky-beacon-api.publicnode.com`"]
+    pub ethereum_beacon_endpoint: Option<String>,
+
+    /// Ethereum network identifier
+    ///
+    /// Specifies which Ethereum network to connect to. Must match the network
+    /// of the beacon node endpoint.
+    #[example = "`mainnet`, `holesky`, `sepolia`"]
+    pub ethereum_network: Option<String>,
+
+    /// Ethereum certification interval (in Ethereum epochs)
+    ///
+    /// How frequently to certify Ethereum state roots. For example, a value of 10
+    /// means a new Ethereum state root certificate will be created every 10 Ethereum epochs
+    /// (approximately 1 hour and 7 minutes on mainnet, where each epoch is ~6.4 minutes).
+    #[example = "`10`"]
+    pub ethereum_certification_interval_epochs: Option<u64>,
 }
 
 /// Uploader needed to copy the snapshot once computed.
@@ -698,6 +782,10 @@ impl ServeCommandConfiguration {
             leader_aggregator_endpoint: None,
             custom_origin_tag_white_list: None,
             aggregate_signature_type: AggregateSignatureType::Concatenation,
+            enable_ethereum_observer: false,
+            ethereum_beacon_endpoint: None,
+            ethereum_network: None,
+            ethereum_certification_interval_epochs: Some(10),
         }
     }
 
@@ -893,6 +981,22 @@ impl ConfigurationSource for ServeCommandConfiguration {
     fn aggregate_signature_type(&self) -> AggregateSignatureType {
         self.aggregate_signature_type
     }
+
+    fn enable_ethereum_observer(&self) -> bool {
+        self.enable_ethereum_observer
+    }
+
+    fn ethereum_beacon_endpoint(&self) -> Option<String> {
+        self.ethereum_beacon_endpoint.clone()
+    }
+
+    fn ethereum_network(&self) -> Option<String> {
+        self.ethereum_network.clone()
+    }
+
+    fn ethereum_certification_interval_epochs(&self) -> Option<u64> {
+        self.ethereum_certification_interval_epochs
+    }
 }
 
 /// Default configuration with all the default values for configurations.
@@ -971,6 +1075,12 @@ pub struct DefaultConfiguration {
 
     /// Aggregate signature type used to create certificates
     pub aggregate_signature_type: String,
+
+    /// Enable Ethereum chain observer
+    pub enable_ethereum_observer: String,
+
+    /// Ethereum certification interval in epochs
+    pub ethereum_certification_interval_epochs: String,
 }
 
 impl Default for DefaultConfiguration {
@@ -1003,6 +1113,8 @@ impl Default for DefaultConfiguration {
             metrics_server_port: 9090,
             persist_usage_report_interval_in_seconds: 10,
             aggregate_signature_type: "Concatenation".to_string(),
+            enable_ethereum_observer: "false".to_string(),
+            ethereum_certification_interval_epochs: "10".to_string(),
         }
     }
 }

@@ -261,5 +261,16 @@ alter table certificate add column chain_type text not null default 'cardano';
 create index certificate_chain_type_index on certificate(chain_type);
         "#,
         ),
+        // Migration 38
+        // Add chain_type to single_signature table for multi-chain support.
+        // This CRITICAL field prevents cross-chain signature mixing which would create invalid certificates.
+        // Default to 'cardano' for backward compatibility with existing signatures.
+        SqlMigration::new(
+            38,
+            r#"
+alter table single_signature add column chain_type text not null default 'cardano';
+create index single_signature_chain_type_index on single_signature(chain_type);
+        "#,
+        ),
     ]
 }

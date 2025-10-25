@@ -55,6 +55,13 @@ impl Beacon for CardanoDbBeacon {}
 impl Beacon for Epoch {}
 
 #[cfg_attr(not(target_family = "wasm"), typetag::serde)]
+impl Artifact for crate::entities::EthereumStateRoot {
+    fn get_id(&self) -> String {
+        self.hash.clone()
+    }
+}
+
+#[cfg_attr(not(target_family = "wasm"), typetag::serde)]
 impl Artifact for CardanoDatabaseSnapshot {
     fn get_id(&self) -> String {
         self.hash.clone()

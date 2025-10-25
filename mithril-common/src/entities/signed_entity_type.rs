@@ -30,6 +30,9 @@ const ENTITY_TYPE_CARDANO_TRANSACTIONS: usize = 3;
 /// Database representation of the SignedEntityType::CardanoDatabase value
 const ENTITY_TYPE_CARDANO_DATABASE: usize = 4;
 
+/// Database representation of the SignedEntityType::EthereumStateRoot value
+const ENTITY_TYPE_ETHEREUM_STATE_ROOT: usize = 5;
+
 /// The signed entity type that represents a type of data signed by the Mithril
 /// protocol Note: Each variant of this enum must be associated to an entry in
 /// the `signed_entity_type` table of the signer/aggregator nodes. The variant
@@ -65,6 +68,9 @@ pub enum SignedEntityType {
 
     /// Cardano Transactions
     CardanoTransactions(Epoch, BlockNumber),
+
+    /// Ethereum State Root
+    EthereumStateRoot(Epoch),
 }
 
 impl SignedEntityType {
@@ -73,13 +79,38 @@ impl SignedEntityType {
         Self::MithrilStakeDistribution(epoch)
     }
 
+    /// Return the chain type for this signed entity type.
+    /// 
+    /// This is used to determine which blockchain this signed entity belongs to.
+    /// All current variants are Cardano-specific. Future Ethereum variants will return "ethereum".
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use mithril_common::entities::{SignedEntityType, Epoch};
+    /// 
+    /// let cardano_entity = SignedEntityType::CardanoStakeDistribution(Epoch(1));
+    /// assert_eq!(cardano_entity.get_chain_type(), "cardano");
+    /// ```
+    pub fn get_chain_type(&self) -> &'static str {
+        match self {
+            Self::MithrilStakeDistribution(_)
+            | Self::CardanoStakeDistribution(_)
+            | Self::CardanoImmutableFilesFull(_)
+            | Self::CardanoDatabase(_)
+            | Self::CardanoTransactions(_, _) => "cardano",
+            Self::EthereumStateRoot(_) => "ethereum",
+        }
+    }
+
     /// Return the epoch from the signed entity.
     pub fn get_epoch(&self) -> Epoch {
         match self {
             Self::CardanoImmutableFilesFull(b) | Self::CardanoDatabase(b) => b.epoch,
             Self::CardanoStakeDistribution(e)
             | Self::MithrilStakeDistribution(e)
-            | Self::CardanoTransactions(e, _) => *e,
+            | Self::CardanoTransactions(e, _)
+            | Self::EthereumStateRoot(e) => *e,
         }
     }
 
@@ -88,7 +119,9 @@ impl SignedEntityType {
         match self {
             Self::CardanoImmutableFilesFull(beacon) | Self::CardanoDatabase(beacon) => beacon.epoch,
             Self::CardanoStakeDistribution(epoch) => epoch.next(),
-            Self::MithrilStakeDistribution(epoch) | Self::CardanoTransactions(epoch, _) => *epoch,
+            Self::MithrilStakeDistribution(epoch) 
+            | Self::CardanoTransactions(epoch, _)
+            | Self::EthereumStateRoot(epoch) => *epoch,
         }
     }
 
@@ -100,6 +133,7 @@ impl SignedEntityType {
             Self::CardanoImmutableFilesFull(_) => ENTITY_TYPE_CARDANO_IMMUTABLE_FILES_FULL,
             Self::CardanoTransactions(_, _) => ENTITY_TYPE_CARDANO_TRANSACTIONS,
             Self::CardanoDatabase(_) => ENTITY_TYPE_CARDANO_DATABASE,
+            Self::EthereumStateRoot(_) => ENTITY_TYPE_ETHEREUM_STATE_ROOT,
         }
     }
 
@@ -109,7 +143,9 @@ impl SignedEntityType {
             Self::CardanoImmutableFilesFull(value) | Self::CardanoDatabase(value) => {
                 serde_json::to_string(value)?
             }
-            Self::CardanoStakeDistribution(value) | Self::MithrilStakeDistribution(value) => {
+            Self::CardanoStakeDistribution(value) 
+            | Self::MithrilStakeDistribution(value)
+            | Self::EthereumStateRoot(value) => {
                 serde_json::to_string(value)?
             }
             Self::CardanoTransactions(epoch, block_number) => {
@@ -131,13 +167,15 @@ impl SignedEntityType {
             Self::CardanoStakeDistribution(_) => Some(Duration::from_secs(600)),
             Self::CardanoTransactions(_, _) => Some(Duration::from_secs(1800)),
             Self::CardanoDatabase(_) => Some(Duration::from_secs(1800)),
+            Self::EthereumStateRoot(_) => Some(Duration::from_secs(1800)),
         }
     }
 
     pub(crate) fn feed_hash(&self, hasher: &mut Sha256) {
         match self {
             SignedEntityType::MithrilStakeDistribution(epoch)
-            | SignedEntityType::CardanoStakeDistribution(epoch) => {
+            | SignedEntityType::CardanoStakeDistribution(epoch)
+            | SignedEntityType::EthereumStateRoot(epoch) => {
                 hasher.update(&epoch.to_be_bytes())
             }
             SignedEntityType::CardanoImmutableFilesFull(db_beacon)
@@ -182,6 +220,7 @@ impl SignedEntityTypeDiscriminants {
             Self::CardanoImmutableFilesFull => ENTITY_TYPE_CARDANO_IMMUTABLE_FILES_FULL,
             Self::CardanoTransactions => ENTITY_TYPE_CARDANO_TRANSACTIONS,
             Self::CardanoDatabase => ENTITY_TYPE_CARDANO_DATABASE,
+            Self::EthereumStateRoot => ENTITY_TYPE_ETHEREUM_STATE_ROOT,
         }
     }
 
@@ -193,6 +232,7 @@ impl SignedEntityTypeDiscriminants {
             ENTITY_TYPE_CARDANO_IMMUTABLE_FILES_FULL => Ok(Self::CardanoImmutableFilesFull),
             ENTITY_TYPE_CARDANO_TRANSACTIONS => Ok(Self::CardanoTransactions),
             ENTITY_TYPE_CARDANO_DATABASE => Ok(Self::CardanoDatabase),
+            ENTITY_TYPE_ETHEREUM_STATE_ROOT => Ok(Self::EthereumStateRoot),
             index => Err(anyhow!("Invalid entity_type_id {index}.")),
         }
     }

@@ -23,6 +23,10 @@ pub struct SingleSignatureRecord {
     /// The STM single signature of the message
     pub signature: HexEncodedSingleSignature,
 
+    /// Chain type this signature is for (e.g., "cardano", "ethereum")
+    /// CRITICAL: Prevents cross-chain signature mixing
+    pub chain_type: String,
+
     /// Date and time when the single_signature was created
     pub created_at: DateTime<Utc>,
 }
@@ -32,6 +36,7 @@ impl SingleSignatureRecord {
         other: &SingleSignature,
         open_message_id: &Uuid,
         registration_epoch_settings_id: Epoch,
+        chain_type: &str,
     ) -> StdResult<Self> {
         let record = SingleSignatureRecord {
             open_message_id: open_message_id.to_owned(),
@@ -39,6 +44,7 @@ impl SingleSignatureRecord {
             registration_epoch_settings_id,
             lottery_indexes: other.won_indexes.to_owned(),
             signature: other.signature.to_json_hex()?,
+            chain_type: chain_type.to_owned(),
             created_at: Utc::now(),
         };
 
@@ -76,7 +82,8 @@ impl SqLiteEntity for SingleSignatureRecord {
         let registration_epoch_settings_id_int = row.read::<i64, _>(2);
         let lottery_indexes_str = row.read::<&str, _>(3);
         let signature = row.read::<&str, _>(4).to_string();
-        let created_at = row.read::<&str, _>(5);
+        let chain_type = row.read::<&str, _>(5).to_string();
+        let created_at = row.read::<&str, _>(6);
 
         let single_signature_record = Self {
             open_message_id,
@@ -94,6 +101,7 @@ impl SqLiteEntity for SingleSignatureRecord {
                 ))
             })?,
             signature,
+            chain_type,
             created_at: DateTime::parse_from_rfc3339(created_at)
                 .map_err(|e| {
                     HydrationError::InvalidData(format!(
@@ -125,6 +133,7 @@ impl SqLiteEntity for SingleSignatureRecord {
             "text",
         );
         projection.add_field("signature", "{:single_signature:}.signature", "text");
+        projection.add_field("chain_type", "{:single_signature:}.chain_type", "text");
         projection.add_field("created_at", "{:single_signature:}.created_at", "text");
 
         projection
@@ -145,6 +154,7 @@ mod tests {
             &single_signature,
             &open_message_id,
             Epoch(1),
+            "cardano",
         )
         .unwrap();
         let single_signature_returned = single_signature_record.try_into().unwrap();

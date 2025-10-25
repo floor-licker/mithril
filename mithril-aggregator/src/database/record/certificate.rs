@@ -113,7 +113,7 @@ impl CertificateRecord {
             aggregate_verification_key: fake_keys::aggregate_verification_key()[0].to_owned(),
             epoch,
             network: fake_data::network().to_string(),
-            chain_type: "cardano".to_string(),
+            chain_type: signed_entity_type.get_chain_type().to_string(), // Derive from signed_entity_type
             signed_entity_type,
             protocol_version: "protocol_version".to_string(),
             protocol_parameters: ProtocolParameters {
@@ -145,6 +145,10 @@ impl TryFrom<Certificate> for CertificateRecord {
             }
         };
 
+        // Derive chain_type from the signed_entity_type
+        // This ensures certificates are automatically tagged with the correct chain
+        let chain_type = signed_entity_type.get_chain_type().to_string();
+
         let certificate_record = CertificateRecord {
             certificate_id: other.hash,
             parent_certificate_id,
@@ -153,7 +157,7 @@ impl TryFrom<Certificate> for CertificateRecord {
             aggregate_verification_key: other.aggregate_verification_key.to_json_hex()?,
             epoch: other.epoch,
             network: other.metadata.network,
-            chain_type: "cardano".to_string(), // Default to cardano for backward compatibility
+            chain_type, // Automatically set from signed_entity_type
             signed_entity_type,
             protocol_version: other.metadata.protocol_version,
             protocol_parameters: other.metadata.protocol_parameters,

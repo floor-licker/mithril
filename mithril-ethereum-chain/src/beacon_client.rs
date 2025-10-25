@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use crate::errors::BeaconApiError;
 use crate::types::{
-    BeaconApiResponse, BeaconBlock, ForkData, GenesisData, ValidatorInfo,
+    BeaconApiResponse, BeaconApiV2BlockResponse, BeaconBlock, ForkData, GenesisData, ValidatorInfo,
 };
 
 /// Client for interacting with Ethereum Beacon Chain API
@@ -42,7 +42,7 @@ impl BeaconClient {
         Self {
             endpoint: endpoint.into(),
             client: Client::builder()
-                .timeout(Duration::from_secs(30))
+                .timeout(Duration::from_secs(120)) // Increased for large validator queries
                 .build()
                 .expect("Failed to create HTTP client"),
         }
@@ -121,14 +121,23 @@ impl BeaconClient {
     ///
     /// * `slot` - The slot number
     pub async fn get_block_by_slot(&self, slot: u64) -> Result<BeaconBlock, BeaconApiError> {
-        let url = format!("{}/eth/v2/beacon/blocks/{}", self.endpoint, slot);
+        self.get_block_by_slot_str(&slot.to_string()).await
+    }
+
+    /// Get a beacon block by slot identifier
+    ///
+    /// # Arguments
+    ///
+    /// * `slot_id` - The slot identifier (number, "head", "finalized", "genesis")
+    pub async fn get_block_by_slot_str(&self, slot_id: &str) -> Result<BeaconBlock, BeaconApiError> {
+        let url = format!("{}/eth/v2/beacon/blocks/{}", self.endpoint, slot_id);
 
         let response = self.client.get(&url).send().await?;
 
         if response.status().as_u16() == 404 {
             return Err(BeaconApiError::NotFound(format!(
                 "Block at slot {} not found",
-                slot
+                slot_id
             )));
         }
 
@@ -139,7 +148,8 @@ impl BeaconClient {
             )));
         }
 
-        let api_response: BeaconApiResponse<BeaconBlock> = response.json().await?;
+        // v2 API returns version info along with the block data
+        let api_response: BeaconApiV2BlockResponse = response.json().await?;
         Ok(api_response.data)
     }
 

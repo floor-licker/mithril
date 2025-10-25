@@ -32,6 +32,7 @@ pub struct MithrilSignableBuilderService {
     cardano_transactions_signable_builder: Arc<dyn SignableBuilder<BlockNumber>>,
     cardano_stake_distribution_builder: Arc<dyn SignableBuilder<Epoch>>,
     cardano_database_signable_builder: Arc<dyn SignableBuilder<CardanoDbBeacon>>,
+    ethereum_state_root_builder: Option<Arc<dyn SignableBuilder<Epoch>>>,
     logger: Logger,
 }
 
@@ -42,6 +43,7 @@ pub struct SignableBuilderServiceDependencies {
     cardano_transactions_signable_builder: Arc<dyn SignableBuilder<BlockNumber>>,
     cardano_stake_distribution_builder: Arc<dyn SignableBuilder<Epoch>>,
     cardano_database_signable_builder: Arc<dyn SignableBuilder<CardanoDbBeacon>>,
+    ethereum_state_root_builder: Option<Arc<dyn SignableBuilder<Epoch>>>,
 }
 
 impl SignableBuilderServiceDependencies {
@@ -59,7 +61,17 @@ impl SignableBuilderServiceDependencies {
             cardano_transactions_signable_builder,
             cardano_stake_distribution_builder,
             cardano_database_signable_builder,
+            ethereum_state_root_builder: None,
         }
+    }
+
+    /// Set the Ethereum state root builder (optional)
+    pub fn with_ethereum_state_root_builder(
+        mut self,
+        builder: Arc<dyn SignableBuilder<Epoch>>,
+    ) -> Self {
+        self.ethereum_state_root_builder = Some(builder);
+        self
     }
 }
 
@@ -78,6 +90,7 @@ impl MithrilSignableBuilderService {
                 .cardano_transactions_signable_builder,
             cardano_stake_distribution_builder: dependencies.cardano_stake_distribution_builder,
             cardano_database_signable_builder: dependencies.cardano_database_signable_builder,
+            ethereum_state_root_builder: dependencies.ethereum_state_root_builder,
             logger: logger.new_with_component_name::<Self>(),
         }
     }
@@ -126,6 +139,22 @@ impl MithrilSignableBuilderService {
                 .with_context(|| format!(
                     "Signable builder service can not compute protocol message for Cardano database with beacon: '{beacon}'"
                 ))?,
+            SignedEntityType::EthereumStateRoot(epoch) => {
+                // Use the Ethereum state root builder if available
+                match &self.ethereum_state_root_builder {
+                    Some(builder) => builder
+                        .compute_protocol_message(epoch)
+                        .await
+                        .with_context(|| format!(
+                            "Signable builder service can not compute protocol message for Ethereum with epoch: '{epoch}'"
+                        ))?,
+                    None => {
+                        return Err(anyhow::anyhow!(
+                            "Ethereum state root signing is not configured. Please configure an Ethereum chain observer."
+                        ));
+                    }
+                }
+            }
         };
 
         Ok(protocol_message)

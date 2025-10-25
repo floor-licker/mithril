@@ -32,7 +32,11 @@
 mod beacon_client;
 mod chain_observer;
 mod errors;
-mod types;
+pub mod types;
+
+// Test utilities - only included in test/dev builds
+#[cfg(any(test, debug_assertions))]
+pub mod test_utils;
 
 pub use beacon_client::BeaconClient;
 pub use chain_observer::EthereumChainObserver;

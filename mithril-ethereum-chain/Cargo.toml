@@ -9,11 +9,15 @@ homepage = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
 
+[features]
+default = []
+test-utils = []
+
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 hex = { workspace = true }
-reqwest = { workspace = true, features = ["json"] }
+reqwest = { workspace = true, features = ["json", "rustls-tls"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -25,4 +29,8 @@ mithril-universal = { path = "../mithril-universal" }
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "test-util", "rt-multi-thread"] }
 mockito = "1.7"
+
+# Enable test-utils feature for tests
+[package.metadata.cargo-all-features]
+skip_optional_dependencies = false
 

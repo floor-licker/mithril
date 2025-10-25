@@ -88,6 +88,7 @@ pub fn setup_single_signature_records(
                     registration_epoch_settings_id: Epoch(epoch),
                     lottery_indexes: (1..=single_signature_id).collect(),
                     signature: fake_keys::single_signature()[3].to_string(),
+                    chain_type: "cardano".to_string(),  // Default to cardano for test data
                     created_at: Utc::now(),
                 });
             }

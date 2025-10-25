@@ -154,6 +154,15 @@ pub enum AggregatorRequest {
     /// Lists the aggregator [Cardano stake distribution][crate::CardanoStakeDistribution]
     ListCardanoStakeDistributions,
 
+    /// Get a specific Ethereum state root certificate from the aggregator
+    GetEthereumCertificate {
+        /// Hash of the certificate to retrieve
+        hash: String,
+    },
+
+    /// Lists the aggregator Ethereum state root certificates
+    ListEthereumCertificates,
+
     /// Get information about the aggregator status
     Status,
 }
@@ -232,6 +241,12 @@ impl AggregatorRequest {
             }
             AggregatorRequest::ListCardanoStakeDistributions => {
                 "artifact/cardano-stake-distributions".to_string()
+            }
+            AggregatorRequest::GetEthereumCertificate { hash } => {
+                format!("ethereum/certificate/{hash}")
+            }
+            AggregatorRequest::ListEthereumCertificates => {
+                "ethereum/certificates".to_string()
             }
             AggregatorRequest::Status => "status".to_string(),
         }

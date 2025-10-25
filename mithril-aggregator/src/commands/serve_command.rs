@@ -18,6 +18,8 @@ use tokio::task::JoinSet;
 use mithril_cli_helper::{
     register_config_value, register_config_value_bool, register_config_value_option,
 };
+
+use crate::configuration::ConfigurationSource;
 use mithril_common::StdResult;
 use mithril_doc::{Documenter, DocumenterDefault, StructDoc};
 use mithril_metric::MetricsServer;
@@ -165,15 +167,18 @@ impl ServeCommand {
         let mut join_set = JoinSet::new();
         join_set.spawn(async move { runtime.run().await.map_err(|e| e.to_string()) });
 
-        // Start the cardano transactions preloader
-        let cardano_transactions_preloader = dependencies_builder
-            .create_cardano_transactions_preloader()
-            .await
-            .with_context(
-                || "Dependencies Builder can not create cardano transactions preloader",
-            )?;
-        let preload_task =
-            tokio::spawn(async move { cardano_transactions_preloader.preload().await });
+        // Start the cardano transactions preloader (only if Cardano types are configured)
+        let preload_task_option = if config.requires_cardano_observer()? {
+            let cardano_transactions_preloader = dependencies_builder
+                .create_cardano_transactions_preloader()
+                .await
+                .with_context(
+                    || "Dependencies Builder can not create cardano transactions preloader",
+                )?;
+            Some(tokio::spawn(async move { cardano_transactions_preloader.preload().await }))
+        } else {
+            None
+        };
 
         // Start the HTTP server
         let routes = dependencies_builder
@@ -291,8 +296,10 @@ impl ServeCommand {
             .send(())
             .map_err(|e| anyhow!("Stop signal could not be sent: {e:?}"))?;
 
-        if !preload_task.is_finished() {
-            preload_task.abort();
+        if let Some(preload_task) = preload_task_option {
+            if !preload_task.is_finished() {
+                preload_task.abort();
+            }
         }
 
         info!(root_logger, "Event store is finishing...");

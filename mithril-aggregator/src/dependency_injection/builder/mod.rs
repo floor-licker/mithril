@@ -148,8 +148,11 @@ pub struct DependenciesBuilder {
     /// Cardano CLI Runner for the [ChainObserver]
     pub cardano_cli_runner: Option<Box<CardanoCliRunner>>,
 
-    /// Chain observer service.
-    pub chain_observer: Option<Arc<dyn ChainObserver>>,
+    /// Chain observer service (Optional: only present when Cardano types are configured).
+    /// 
+    /// This is `None` for Ethereum-only aggregators, maintaining backward compatibility
+    /// while allowing deployment without a Cardano node.
+    pub chain_observer: Option<Option<Arc<dyn ChainObserver>>>,
 
     /// Chain block reader
     pub chain_block_reader: Option<Arc<Mutex<dyn ChainBlockReader>>>,
@@ -372,6 +375,8 @@ impl DependenciesBuilder {
     pub async fn build_serve_dependencies_container(
         &mut self,
     ) -> Result<ServeCommandDependenciesContainer> {
+        use mithril_cardano_node_chain::test::double::FakeChainObserver;
+        
         #[allow(deprecated)]
         let dependencies_manager = ServeCommandDependenciesContainer {
             root_logger: self.root_logger(),
@@ -379,7 +384,9 @@ impl DependenciesBuilder {
             certificate_repository: self.get_certificate_repository().await?,
             verification_key_store: self.get_verification_key_store().await?,
             epoch_settings_storer: self.get_epoch_settings_store().await?,
-            chain_observer: self.get_chain_observer().await?,
+            // For Ethereum-only aggregators, use a FakeChainObserver
+            chain_observer: self.get_chain_observer().await?
+                .unwrap_or_else(|| Arc::new(FakeChainObserver::default())),
             certificate_chain_synchronizer: self.get_certificate_chain_synchronizer().await?,
             signer_registerer: self.get_signer_registerer().await?,
             signer_synchronizer: self.get_signer_synchronizer().await?,
@@ -467,13 +474,17 @@ impl DependenciesBuilder {
     pub async fn create_genesis_container(
         &mut self,
     ) -> Result<GenesisCommandDependenciesContainer> {
+        use mithril_cardano_node_chain::test::double::FakeChainObserver;
+        
         let network = self.configuration.get_network().with_context(
             || "Dependencies Builder can not get Cardano network while building genesis container",
         )?;
 
         let dependencies = GenesisCommandDependenciesContainer {
             network,
-            chain_observer: self.get_chain_observer().await?,
+            // For Ethereum-only aggregators, use a FakeChainObserver
+            chain_observer: self.get_chain_observer().await?
+                .unwrap_or_else(|| Arc::new(FakeChainObserver::default())),
             certificate_repository: self.get_certificate_repository().await?,
             certificate_verifier: self.get_certificate_verifier().await?,
             protocol_parameters_retriever: self.get_protocol_parameters_retriever().await?,

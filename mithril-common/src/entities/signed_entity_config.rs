@@ -75,6 +75,11 @@ impl SignedEntityConfig {
             SignedEntityTypeDiscriminants::CardanoDatabase => SignedEntityType::CardanoDatabase(
                 CardanoDbBeacon::new(*time_point.epoch, time_point.immutable_file_number),
             ),
+            SignedEntityTypeDiscriminants::EthereumStateRoot => {
+                // For Ethereum, we use the current epoch
+                // TODO: This may need adjustment based on Ethereum's finality model
+                SignedEntityType::EthereumStateRoot(time_point.epoch)
+            }
         };
 
         Ok(signed_entity_type)

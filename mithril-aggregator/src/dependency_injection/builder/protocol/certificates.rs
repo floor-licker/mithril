@@ -216,7 +216,13 @@ impl DependenciesBuilder {
     async fn build_signer_registration_verifier(
         &mut self,
     ) -> Result<Arc<dyn SignerRegistrationVerifier>> {
-        let registerer = MithrilSignerRegistrationVerifier::new(self.get_chain_observer().await?);
+        use mithril_cardano_node_chain::test::double::FakeChainObserver;
+        
+        // For Ethereum-only aggregators, use a FakeChainObserver
+        let chain_observer = self.get_chain_observer().await?
+            .unwrap_or_else(|| Arc::new(FakeChainObserver::default()));
+        
+        let registerer = MithrilSignerRegistrationVerifier::new(chain_observer);
 
         Ok(Arc::new(registerer))
     }

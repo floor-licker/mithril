@@ -103,6 +103,8 @@ pub struct MithrilSignedEntityService {
         Arc<dyn ArtifactBuilder<Epoch, CardanoStakeDistribution>>,
     cardano_database_artifact_builder:
         Arc<dyn ArtifactBuilder<CardanoDbBeacon, CardanoDatabaseSnapshot>>,
+    ethereum_state_root_artifact_builder:
+        Option<Arc<dyn ArtifactBuilder<Epoch, mithril_common::entities::EthereumStateRoot>>>,
     metrics_service: Arc<MetricsService>,
     logger: Logger,
 }
@@ -119,6 +121,8 @@ pub struct SignedEntityServiceArtifactsDependencies {
         Arc<dyn ArtifactBuilder<Epoch, CardanoStakeDistribution>>,
     cardano_database_artifact_builder:
         Arc<dyn ArtifactBuilder<CardanoDbBeacon, CardanoDatabaseSnapshot>>,
+    ethereum_state_root_artifact_builder:
+        Option<Arc<dyn ArtifactBuilder<Epoch, mithril_common::entities::EthereumStateRoot>>>,
 }
 
 impl SignedEntityServiceArtifactsDependencies {
@@ -146,7 +150,17 @@ impl SignedEntityServiceArtifactsDependencies {
             cardano_transactions_artifact_builder,
             cardano_stake_distribution_artifact_builder,
             cardano_database_artifact_builder,
+            ethereum_state_root_artifact_builder: None,
         }
+    }
+
+    /// Set the Ethereum state root artifact builder (optional)
+    pub fn with_ethereum_state_root_artifact_builder(
+        mut self,
+        builder: Arc<dyn ArtifactBuilder<Epoch, mithril_common::entities::EthereumStateRoot>>,
+    ) -> Self {
+        self.ethereum_state_root_artifact_builder = Some(builder);
+        self
     }
 }
 
@@ -170,6 +184,7 @@ impl MithrilSignedEntityService {
             cardano_stake_distribution_artifact_builder: dependencies
                 .cardano_stake_distribution_artifact_builder,
             cardano_database_artifact_builder: dependencies.cardano_database_artifact_builder,
+            ethereum_state_root_artifact_builder: dependencies.ethereum_state_root_artifact_builder,
             signed_entity_type_lock,
             metrics_service,
             logger: logger.new_with_component_name::<Self>(),
@@ -275,6 +290,23 @@ impl MithrilSignedEntityService {
                         )
                     })?
             )),
+            SignedEntityType::EthereumStateRoot(epoch) => match &self.ethereum_state_root_artifact_builder {
+                Some(builder) => Ok(Arc::new(
+                    builder
+                        .compute_artifact(epoch, certificate)
+                        .await
+                        .with_context(|| {
+                            format!(
+                                "Signed Entity Service can not compute artifact for entity type: '{signed_entity_type}'"
+                            )
+                        })?,
+                )),
+                None => {
+                    Err(anyhow::anyhow!(
+                        "Ethereum state root artifact building is not configured. Please configure an Ethereum chain observer."
+                    ))
+                }
+            },
         }
     }
 
@@ -313,6 +345,11 @@ impl MithrilSignedEntityService {
             }
             SignedEntityType::CardanoDatabase(_) => {
                 metrics.get_artifact_cardano_database_total_produced_since_startup()
+            }
+            SignedEntityType::EthereumStateRoot(_) => {
+                // TODO: Add dedicated Ethereum metric when artifact builder is implemented
+                // For now, use a generic counter
+                metrics.get_artifact_mithril_stake_distribution_total_produced_since_startup()
             }
         };
 
@@ -711,6 +748,9 @@ mod tests {
                 .get(),
             SignedEntityType::CardanoDatabase(_) => metrics_service
                 .get_artifact_cardano_database_total_produced_since_startup()
+                .get(),
+            SignedEntityType::EthereumStateRoot(_) => metrics_service
+                .get_artifact_mithril_stake_distribution_total_produced_since_startup()
                 .get(),
         }
     }

@@ -93,6 +93,14 @@ impl Hydrator {
                 })?;
                 SignedEntityType::CardanoDatabase(beacon)
             }
+            SignedEntityTypeDiscriminants::EthereumStateRoot => {
+                let epoch: Epoch = serde_json::from_str(beacon_str).map_err(|e| {
+                    HydrationError::InvalidData(format!(
+                        "Invalid Epoch JSON representation '{beacon_str}. Error: {e}'."
+                    ))
+                })?;
+                SignedEntityType::EthereumStateRoot(epoch)
+            }
         };
 
         Ok(signed_entity)

@@ -117,12 +117,54 @@ pub struct BeaconApiResponse<T> {
     pub data: T,
 }
 
+/// Beacon API v2 block response (includes version info)
+///
+///
+/// The Ethereum Beacon API has TWO versions of the blocks endpoint:
+/// - `/eth/v1/beacon/blocks/{slot}` - Returns just the block data
+/// - `/eth/v2/beacon/blocks/{slot}` - Returns block data PLUS metadata (version, finalized, etc.)
+///
+/// We use v2 because:
+/// 1. It's more future-proof (includes fork version info)
+/// 2. The metadata fields help with debugging
+/// 3. Some beacon nodes return better error messages on v2
+///
+/// The response structure is:
+/// ```json
+/// {
+///   "version": "deneb",
+///   "execution_optimistic": false,
+///   "finalized": true,
+///   "data": { ...actual block data... }
+/// }
+/// ```
+///
+/// We need this wrapper struct to deserialize the outer envelope, then extract the
+/// `data` field which contains the actual `BeaconBlock`.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct BeaconApiV2BlockResponse {
+    /// Block version (e.g., "fulu", "deneb", "capella")
+    /// This tells us which Ethereum fork the block is from
+    #[serde(default)]
+    pub version: Option<String>,
+    
+    /// Whether execution is optimistic
+    /// (true if the execution layer hasn't verified the block yet)
+    #[serde(default)]
+    pub execution_optimistic: Option<bool>,
+    
+    /// Whether block is finalized
+    /// (true if the block has been finalized by the consensus layer)
+    #[serde(default)]
+    pub finalized: Option<bool>,
+    
+    /// The actual beacon block data (what we really want)
+    pub data: BeaconBlock,
+}
+
 /// Beacon block
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct BeaconBlock {
-    /// Block root
-    pub root: String,
-    
     /// Beacon block message
     pub message: BeaconBlockMessage,
 }

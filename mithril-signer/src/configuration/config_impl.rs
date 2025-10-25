@@ -263,6 +263,61 @@ impl Configuration {
             )
         })
     }
+
+    /// Populate chain-specific configuration from raw config fields
+    ///
+    /// ## Why this two-phase loading exists
+    ///
+    /// You might notice this - we deserialize the config into a `Configuration` struct,
+    /// THEN call this method to populate `ethereum_config`. Why not just deserialize everything
+    /// at once?
+    ///
+    /// The problem: The `Configuration` struct has an `ethereum_config: Option<EthereumConfig>`
+    /// field marked with `#[serde(skip)]`. This means serde WON'T automatically populate it during
+    /// deserialization. If we tried to deserialize it normally, existing Cardano configs (which
+    /// don't have beacon_endpoint, validator_pubkey, etc.) would fail to deserialize.
+    ///
+    /// The solution: Two-phase loading:
+    /// 1. Phase 1: Deserialize into `Configuration` (skips ethereum_config)
+    /// 2. Phase 2: Call this method to manually parse chain-specific fields
+    ///
+    /// This way, Cardano configs work unchanged (backward compatibility), and Ethereum configs
+    /// can manually parse their fields based on the chain_type.
+    ///
+    /// This must be called after deserialization to properly set ethereum_config.
+    pub fn populate_chain_config(&mut self, raw_config: &config::Config) -> StdResult<()> {
+        match self.chain_type {
+            ChainType::Cardano => {
+                // For Cardano, all fields are top-level in the config and already deserialized.
+                // Nothing extra to do here - backward compatibility working as expected.
+                Ok(())
+            }
+            ChainType::Ethereum => {
+                // For Ethereum, manually parse the Ethereum-specific fields from the raw config
+                let eth_config = EthereumConfig {
+                    beacon_endpoint: raw_config
+                        .get_string("beacon_endpoint")
+                        .with_context(|| "Ethereum configuration requires 'beacon_endpoint'")?,
+                    network: raw_config
+                        .get_string("network")
+                        .with_context(|| "Ethereum configuration requires 'network'")?,
+                    validator_pubkey: raw_config
+                        .get_string("validator_pubkey")
+                        .with_context(|| "Ethereum configuration requires 'validator_pubkey'")?,
+                    validator_seckey_path: PathBuf::from(
+                        raw_config
+                            .get_string("validator_seckey_path")
+                            .with_context(|| "Ethereum configuration requires 'validator_seckey_path'")?
+                    ),
+                    certification_interval_epochs: raw_config
+                        .get_int("certification_interval_epochs")
+                        .unwrap_or(675) as u64,
+                };
+                self.ethereum_config = Some(eth_config);
+                Ok(())
+            }
+        }
+    }
 }
 
 /// Default configuration with all the default values for configurations.

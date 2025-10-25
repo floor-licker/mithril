@@ -301,6 +301,9 @@ mod test {
                             beacon.epoch, beacon.immutable_file_number
                         )
                     }
+                    SignedEntityType::EthereumStateRoot(epoch) => {
+                        format!("ethereum-state-root-{epoch}")
+                    }
                 };
 
                 let signed_entity_record = SignedEntityRecord {

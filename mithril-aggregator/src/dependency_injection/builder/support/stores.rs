@@ -94,20 +94,26 @@ impl DependenciesBuilder {
             self.get_sqlite_connection().await?,
             self.configuration.safe_epoch_retention_limit(),
         );
-        let current_epoch = self
-            .get_chain_observer()
-            .await?
-            .get_current_epoch()
-            .await
-            .map_err(|e| DependenciesBuilderError::Initialization {
-                message: "cannot create aggregator runner: failed to retrieve current epoch."
-                    .to_string(),
-                error: Some(e.into()),
-            })?
-            .ok_or(DependenciesBuilderError::Initialization {
-                message: "cannot build aggregator runner: no epoch returned.".to_string(),
-                error: None,
-            })?;
+        let current_epoch = {
+            use mithril_cardano_node_chain::test::double::FakeChainObserver;
+            
+            // For Ethereum-only aggregators, use a FakeChainObserver
+            let chain_observer = self.get_chain_observer().await?
+                .unwrap_or_else(|| Arc::new(FakeChainObserver::default()));
+            
+            chain_observer
+                .get_current_epoch()
+                .await
+                .map_err(|e| DependenciesBuilderError::Initialization {
+                    message: "cannot create aggregator runner: failed to retrieve current epoch."
+                        .to_string(),
+                    error: Some(e.into()),
+                })?
+                .ok_or(DependenciesBuilderError::Initialization {
+                    message: "cannot build aggregator runner: no epoch returned.".to_string(),
+                    error: None,
+                })?
+        };
         let retrieval_epoch = current_epoch
             .offset_to_signer_retrieval_epoch()
             .map_err(|e| DependenciesBuilderError::Initialization {

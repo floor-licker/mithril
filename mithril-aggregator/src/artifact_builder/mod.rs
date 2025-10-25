@@ -4,6 +4,7 @@ mod cardano_database_artifacts;
 mod cardano_immutable_files_full;
 mod cardano_stake_distribution;
 mod cardano_transactions;
+mod ethereum_state_root;
 mod interface;
 mod mithril_stake_distribution;
 
@@ -12,5 +13,6 @@ pub use cardano_database_artifacts::*;
 pub use cardano_immutable_files_full::*;
 pub use cardano_stake_distribution::*;
 pub use cardano_transactions::*;
+pub use ethereum_state_root::*;
 pub use interface::*;
 pub use mithril_stake_distribution::*;

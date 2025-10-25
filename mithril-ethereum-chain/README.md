@@ -1,10 +1,23 @@
 # Mithril Ethereum Chain
 
-Ethereum blockchain integration for Mithril, enabling fast-sync for Ethereum nodes using stake-based threshold signatures.
+Ethereum blockchain integration for Mithril, demonstrating multi-chain support through Beacon Chain state root attestation.
+
+> **Status:** Proof-of-Concept  
+> **Purpose:** Reference implementation validating Mithril's multi-chain architecture
 
 ## Overview
 
-This crate provides the implementation of Mithril's universal chain observer for Ethereum, allowing Ethereum validators to participate in Mithril's certification process.
+This crate provides the implementation of Mithril's universal chain observer for Ethereum. It enables Ethereum validators to collectively sign Beacon Chain state commitments, demonstrating that Mithril's stake-based threshold signature protocol can work beyond Cardano.
+
+**What this provides:**
+- Beacon Chain API integration for validator stake queries
+- State root attestation (validators collectively sign finalized state roots)
+- Foundation for future Ethereum-specific Mithril use cases
+
+**What this does NOT provide:**
+- Fast sync for Ethereum nodes (certifies state roots, not state data)
+- Production deployment for Ethereum mainnet
+- Complete checkpoint sync or snapshot certification
 
 ## Features
 

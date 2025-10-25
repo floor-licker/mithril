@@ -26,12 +26,13 @@ impl SingleSignatureRepository {
         &self,
         single_signature: &SingleSignature,
         open_message: &OpenMessageRecord,
-        _chain_type: &str,  // Currently unused, kept for future extensibility and API consistency
+        chain_type: &str,
     ) -> StdResult<SingleSignatureRecord> {
         let single_signature = SingleSignatureRecord::try_from_single_signature(
             single_signature,
             &open_message.open_message_id,
             open_message.epoch.offset_to_signer_retrieval_epoch()?,
+            chain_type,
         )?;
         let record = self.connection.fetch_first(UpdateSingleSignatureRecordQuery::one(single_signature.clone()))?
             .unwrap_or_else(|| {

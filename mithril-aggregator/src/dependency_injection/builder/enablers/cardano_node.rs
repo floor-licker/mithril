@@ -21,7 +21,38 @@ use crate::dependency_injection::{DependenciesBuilder, Result};
 use crate::get_dependency;
 use crate::services::{MithrilStakeDistributionService, StakeDistributionService};
 impl DependenciesBuilder {
-    async fn build_chain_observer(&mut self) -> Result<Arc<dyn ChainObserver>> {
+    /// Build the Cardano chain observer conditionally based on signed_entity_types configuration.
+    ///
+    /// Originally, the aggregator ALWAYS created a Cardano chain observer on startup, which
+    /// required connecting to a Cardano node. This made it impossible to deploy an Ethereum-only
+    /// aggregator - it would fail to start without a Cardano node even though it didn't need one.
+    ///
+    /// Now we check the configured `signed_entity_types` (what the aggregator is supposed to
+    /// certify) and only create the Cardano observer if there are actual Cardano types to certify.
+    /// If you're only certifying Ethereum stuff, no Cardano observer is created.
+    ///
+    /// Returns `None` if no Cardano-specific signed entity types are configured
+    /// (e.g., Ethereum-only aggregator).
+    ///
+    /// This maintains backward compatibility:
+    /// - Existing Cardano configs work unchanged (observer always created)
+    /// - Ethereum-only configs skip Cardano observer (no Cardano node needed)
+    /// - Multi-chain configs create both observers
+    async fn build_chain_observer(&mut self) -> Result<Option<Arc<dyn ChainObserver>>> {
+        // First, ask the config: "Do we actually need Cardano?"
+        // This looks at signed_entity_types and returns true if ANY Cardano type is present.
+        let requires_cardano = self
+            .configuration
+            .requires_cardano_observer()
+            .with_context(|| "Dependencies Builder failed to determine if Cardano observer is required")?;
+
+        if !requires_cardano {
+            // We're Ethereum-only (or something else). Skip Cardano entirely.
+            // This means no Cardano node connection required, which is what we want.
+            return Ok(None);
+        }
+
+        // We need Cardano. Build the observer using the original logic below.
         let chain_observer: Arc<dyn ChainObserver> = match self.configuration.environment() {
             ExecutionEnvironment::Production => {
                 let chain_observer_type = &self.configuration.chain_observer_type();
@@ -48,11 +79,13 @@ impl DependenciesBuilder {
             _ => Arc::new(FakeChainObserver::default()),
         };
 
-        Ok(chain_observer)
+        Ok(Some(chain_observer))
     }
 
-    /// Return a [ChainObserver]
-    pub async fn get_chain_observer(&mut self) -> Result<Arc<dyn ChainObserver>> {
+    /// Return a [ChainObserver] if Cardano types are configured.
+    ///
+    /// Returns `None` for Ethereum-only aggregators.
+    pub async fn get_chain_observer(&mut self) -> Result<Option<Arc<dyn ChainObserver>>> {
         get_dependency!(self.chain_observer)
     }
 
@@ -131,13 +164,18 @@ impl DependenciesBuilder {
             .configuration
             .compute_allowed_signed_entity_types_discriminants()?
             .contains(&SignedEntityTypeDiscriminants::CardanoTransactions);
+        
+        // CardanoTransactionsPreloader requires Cardano chain observer
+        let chain_observer = self.get_chain_observer().await?
+            .ok_or_else(|| anyhow::anyhow!("Cardano chain observer is required for CardanoTransactionsPreloader but is not configured"))?;
+        
         let cardano_transactions_preloader = CardanoTransactionsPreloader::new(
             self.get_signed_entity_type_lock().await?,
             self.get_transactions_importer().await?,
             self.configuration
                 .cardano_transactions_signing_config()
                 .security_parameter,
-            self.get_chain_observer().await?,
+            chain_observer,
             self.root_logger(),
             Arc::new(CardanoTransactionsPreloaderActivation::new(activation)),
         );
@@ -148,9 +186,16 @@ impl DependenciesBuilder {
     async fn build_stake_distribution_service(
         &mut self,
     ) -> Result<Arc<dyn StakeDistributionService>> {
+        use mithril_cardano_node_chain::test::double::FakeChainObserver;
+        
+        // For Ethereum-only aggregators, use a FakeChainObserver
+        // (MithrilStakeDistribution is still needed for protocol parameters)
+        let chain_observer = self.get_chain_observer().await?
+            .unwrap_or_else(|| Arc::new(FakeChainObserver::default()));
+        
         let stake_distribution_service = Arc::new(MithrilStakeDistributionService::new(
             self.get_stake_store().await?,
-            self.get_chain_observer().await?,
+            chain_observer,
         ));
 
         Ok(stake_distribution_service)

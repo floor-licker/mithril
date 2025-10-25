@@ -472,8 +472,10 @@ impl RuntimeTester {
                         SingleSignatureAuthenticationStatus::Authenticated;
                 }
 
+                // Determine chain_type from signed_entity_type
+                let chain_type = signed_entity_type.get_chain_type();
                 certifier_service
-                    .register_single_signature(&signed_entity_type, &single_signature)
+                    .register_single_signature(&signed_entity_type, &single_signature, chain_type)
                     .await
                     .with_context(|| "registering a winning lottery signature should not fail")?;
             } else {

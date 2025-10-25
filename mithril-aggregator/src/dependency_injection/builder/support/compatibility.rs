@@ -23,15 +23,23 @@ impl DependenciesBuilder {
 
     async fn build_era_reader(&mut self) -> Result<Arc<EraReader>> {
         let era_adapter: Arc<dyn EraReaderAdapter> = match self.configuration.environment() {
-            ExecutionEnvironment::Production => EraReaderAdapterBuilder::new(
-                &self.configuration.era_reader_adapter_type(),
-                &self.configuration.era_reader_adapter_params(),
-            )
-            .build(self.get_chain_observer().await?)
-            .map_err(|e| DependenciesBuilderError::Initialization {
-                message: "Could not build EraReader as dependency.".to_string(),
-                error: Some(e.into()),
-            })?,
+            ExecutionEnvironment::Production => {
+                use mithril_cardano_node_chain::test::double::FakeChainObserver;
+                
+                // For Ethereum-only aggregators, use a FakeChainObserver
+                let chain_observer = self.get_chain_observer().await?
+                    .unwrap_or_else(|| Arc::new(FakeChainObserver::default()));
+                
+                EraReaderAdapterBuilder::new(
+                    &self.configuration.era_reader_adapter_type(),
+                    &self.configuration.era_reader_adapter_params(),
+                )
+                .build(chain_observer)
+                .map_err(|e| DependenciesBuilderError::Initialization {
+                    message: "Could not build EraReader as dependency.".to_string(),
+                    error: Some(e.into()),
+                })?
+            }
             _ => Arc::new(EraReaderDummyAdapter::from_markers(vec![EraMarker::new(
                 &SupportedEra::Pythagoras.to_string(),
                 Some(Epoch(0)),

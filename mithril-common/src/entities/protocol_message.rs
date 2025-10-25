@@ -48,6 +48,18 @@ pub enum ProtocolMessagePartKey {
     /// The ProtocolMessage part key associated to the Cardano database Merkle root
     #[serde(rename = "cardano_database_merkle_root")]
     CardanoDatabaseMerkleRoot,
+
+    /// The ProtocolMessage part key associated to the Ethereum state root
+    #[serde(rename = "ethereum_state_root")]
+    EthereumStateRoot,
+
+    /// The ProtocolMessage part key associated to the Ethereum beacon block number
+    #[serde(rename = "ethereum_beacon_block_number")]
+    EthereumBeaconBlockNumber,
+
+    /// The ProtocolMessage part key associated to the Ethereum epoch
+    #[serde(rename = "ethereum_epoch")]
+    EthereumEpoch,
 }
 
 impl Display for ProtocolMessagePartKey {
@@ -64,6 +76,9 @@ impl Display for ProtocolMessagePartKey {
                 write!(f, "cardano_stake_distribution_merkle_root")
             }
             Self::CardanoDatabaseMerkleRoot => write!(f, "cardano_database_merkle_root"),
+            Self::EthereumStateRoot => write!(f, "ethereum_state_root"),
+            Self::EthereumBeaconBlockNumber => write!(f, "ethereum_beacon_block_number"),
+            Self::EthereumEpoch => write!(f, "ethereum_epoch"),
         }
     }
 }

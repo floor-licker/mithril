@@ -1,4 +1,17 @@
 //! Adapter to make UniversalChainObserver work with mithril-signer's infrastructure
+//!
+//! The signer was originally built with a Cardano-specific `ChainObserver` trait that has
+//! methods like `get_current_datums()` (Cardano transaction metadata) and `get_current_era()`
+//! (Shelley/Babbage/etc). These concepts don't exist on Ethereum or other chains.
+//!
+//! Rather than refactoring the entire signer codebase to use the new `UniversalChainObserver`
+//! trait (which would be a massive change touching many files), I use the adapter pattern.
+//! This adapter makes a `UniversalChainObserver` (like our Ethereum one) look like the old
+//! Cardano-specific trait that the signer expects.
+//!
+//! - Cardano-specific methods (datums, era) return empty/placeholder values
+//! - Universal methods (epoch, stake distribution) are translated between traits
+//! - The signer can work with any chain without knowing the difference
 
 use std::sync::Arc;
 
@@ -14,6 +27,10 @@ use mithril_common::{
 use mithril_universal::UniversalChainObserver;
 
 /// Adapter that wraps a UniversalChainObserver to implement Cardano's ChainObserver trait
+///
+/// This allows the signer to work with any blockchain (Ethereum, Cardano, etc.) without
+/// changing its core logic. The adapter translates between the universal interface and
+/// the Cardano-specific interface the signer was originally built for.
 pub struct UniversalChainObserverAdapter {
     inner: Arc<dyn UniversalChainObserver>,
 }

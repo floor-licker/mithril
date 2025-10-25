@@ -113,6 +113,12 @@ impl SignedEntityRecord {
                 let artifact = fake_data::cardano_transactions_snapshot(block_number);
                 get_id_and_artifact(&artifact)
             }
+            SignedEntityType::EthereumStateRoot(epoch) => {
+                // For testing purposes, create a minimal artifact for Ethereum
+                let id = format!("ethereum-state-root-{}", epoch);
+                let artifact = format!("{{\"epoch\":{},\"state_root\":\"0x1234\"}}", epoch);
+                (id, artifact)
+            }
         };
 
         SignedEntityRecord {

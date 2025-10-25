@@ -113,6 +113,32 @@ impl CertifierService for MithrilCertifierService {
         );
         trace!(self.logger, ">> register_single_signature"; "complete_single_signatures" => #?signature, "chain_type" => chain_type);
 
+        // CRITICAL VALIDATION: Prevent cross-chain signature mixing
+        // If we let a Cardano signature slip into an Ethereum certificate (or vice versa), the
+        // multi-signature aggregation will fail cryptographically. Even worse, if it somehow didn't
+        // fail immediately, the certificate would be verifiably invalid because the stake distribution
+        // wouldn't match the signatures.
+        //
+        // This check is our last line of defense. Even if routing is misconfigured or a signer sends
+        // to the wrong endpoint, we catch it here and reject the signature before it contaminates
+        // the signature pool.
+        let expected_chain_type = signed_entity_type.get_chain_type();
+        if chain_type != expected_chain_type {
+            warn!(
+                self.logger,
+                "register_single_signature: Chain type mismatch! Signature submitted for '{}' but signed_entity_type '{}' requires '{}'. This would create an invalid certificate.",
+                chain_type,
+                signed_entity_type,
+                expected_chain_type
+            );
+            return Err(anyhow::anyhow!(
+                "Chain type mismatch: signature for '{}' cannot be used for signed entity type '{}' which requires '{}'",
+                chain_type,
+                signed_entity_type,
+                expected_chain_type
+            ));
+        }
+
         let open_message = self
             .get_open_message_record(signed_entity_type)
             .await.with_context(|| format!("CertifierService can not get open message record for signed_entity_type: '{signed_entity_type}'"))?

@@ -1,6 +1,8 @@
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use mithril_cardano_node_chain::test::double::FakeChainObserver;
+
 use crate::dependency_injection::{DependenciesBuilder, EpochServiceWrapper, Result};
 use crate::get_dependency;
 use crate::services::{EpochServiceDependencies, MithrilEpochService};
@@ -8,7 +10,12 @@ impl DependenciesBuilder {
     async fn build_epoch_service(&mut self) -> Result<EpochServiceWrapper> {
         let verification_key_store = self.get_verification_key_store().await?;
         let epoch_settings_storer = self.get_epoch_settings_store().await?;
-        let chain_observer = self.get_chain_observer().await?;
+        
+        // For Ethereum-only aggregators, use a FakeChainObserver (maintains backward compatibility)
+        // For Cardano or multi-chain, use the real Cardano observer
+        let chain_observer = self.get_chain_observer().await?
+            .unwrap_or_else(|| Arc::new(FakeChainObserver::default()));
+        
         let era_checker = self.get_era_checker().await?;
         let stake_store = self.get_stake_store().await?;
         let epoch_settings = self.configuration.get_epoch_settings_configuration();
